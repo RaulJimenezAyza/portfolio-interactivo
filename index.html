@@ -5688,7 +5688,7 @@ const FLAT_DISCS = [
   { x: -20, z: 12, r: 10, fade: 7 },    // pond
   { x: 0, z: -17, r: 9, fade: 7 },      // RAUL letters
   { x: -8, z: 20, r: 7, fade: 6 },      // seesaw
-  { x: -30, z: -50, r: 14, fade: 8 },   // cave entrance pad
+  { x: -37, z: -5, r: 15, fade: 12 },   // cave entrance pad (hillside west of the plaza)
   { x: 24, z: -2, r: 8, fade: 6 },      // ramp
   { x: -26, z: 2, r: 8, fade: 6 },      // ramp
   ...ZONE_POS.map(p => ({ x: p.x, z: p.z, r: p.r + 3, fade: 8 }))
@@ -5764,12 +5764,18 @@ function heightAt(x, z) {
    screen dims, and they walk out the other side.
    ============================================================ */
 const CAVE_ORIGIN = { x: 0, z: 4000 };
-const CAVE_MOUTH = { x: -30, z: -50 };        // tucked away between the forge and the ruins
+/* The mouth sits at the foot of the western ridge, a short walk from the
+   plaza rather than out in the far corner. The ground in front of it is flat
+   and the hill behind rises to ~10m, so the tunnel reads as bored into a real
+   hillside without any of it being dug under walkable terrain. */
+const CAVE_MOUTH = { x: -37, z: -5 };
 
-/* entrance corridor on the island: straight, level, roofed */
+/* entrance corridor on the island: straight, level, roofed. Short enough to
+   stay entirely inside the flattened pad — past the pad the hill takes over,
+   and a corridor reaching into it would be buried by the terrain mesh. */
 const ENTRY_DIR = Math.atan2(CAVE_MOUTH.x, CAVE_MOUTH.z);   // points away from the plaza
-const ENTRY_LEN = 16;
-const ENTRY_HALF = 4;
+const ENTRY_LEN = 13;
+const ENTRY_HALF = 3.6;
 function entryAxis(t) {
   return { x: CAVE_MOUTH.x + Math.sin(ENTRY_DIR) * ENTRY_LEN * t,
            z: CAVE_MOUTH.z + Math.cos(ENTRY_DIR) * ENTRY_LEN * t };
@@ -5798,6 +5804,14 @@ const CAVE_EDGES = [
 ];
 const CAVE_Y = 0;                                // the caverns sit at ground level
 const CORRIDOR_H = 9;                            // shared by corridors and chamber doorways
+/* Radius of the bored tunnels. Comfortably wider than the walkable half-width
+   (6) so the camera never ends up inside the rock, and short enough to pass
+   under CORRIDOR_H where it opens into a chamber. */
+const TUNNEL_R = 8.4;
+/* the colour each chamber's crystal veins glow, so the halls read apart from
+   one another at a glance rather than all being generic blue rock */
+const CAVE_TINT = { gate: 0xe8b06a, hub: 0x9fd8ff, echo: 0x7ce8e0, river: 0xffd76a,
+                    runes: 0xf2a2c4, crypt: 0x8fb0ff };
 
 /* Distance along a unit ray to the first hit on a sphere, or null — the
    camera's occlusion test. This build's three.js has no Raycaster, and
@@ -5960,6 +5974,12 @@ class Game {
     this.caveFill.position.set(-40, 20, 35);
     this.caveFill.visible = false;
     this.scene.add(this.caveFill);
+    /* and one aimed up from below, or the vaults stay pitch black: every other
+       light in the cave points down, so nothing ever hits a ceiling. */
+    this.caveVault = new DirLight(0x5f7bb0, .5);
+    this.caveVault.position.set(12, -60, 18);
+    this.caveVault.visible = false;
+    this.scene.add(this.caveVault);
 
     /* physics */
     this.world = new CWorld({ gravity: new CVec(0, -24, 0) });
@@ -6055,6 +6075,45 @@ class Game {
   /* ============ small helpers ============ */
   mat(c, o = {}) { return new StdMat(Object.assign({ color: c, roughness: .85, metalness: .05 }, o)); }
   bmat(c, o = {}) { return new BasicMat(Object.assign({ color: c }, o)); }
+
+  /* Push the vertices of a cylinder-like shell in and out by noise so the cave
+     stops looking like it was turned on a lathe. `amp` is the largest deviation
+     either way, and the shells always sit far enough outside the walkable
+     radius that even the deepest inward dent stays clear of it. The noise is
+     sampled in world space, so neighbouring pieces that share an edge — a wall
+     arc and the tunnel that meets it — agree along the seam. */
+  rockify(geo, amp, ox = 0, oz = 0, freq = .17) {
+    const p = geo.attributes.position;
+    for (let i = 0; i < p.count; i++) {
+      const x = p.getX(i), y = p.getY(i), z = p.getZ(i);
+      const r = Math.hypot(x, z);
+      if (r < 1e-3) continue;
+      const n = fbm((x + ox) * freq + y * .09, (z + oz) * freq - y * .07, 3);
+      const k = (r + amp * (n - .5) * 2) / r;
+      p.setX(i, x * k); p.setZ(i, z * k);
+    }
+    p.needsUpdate = true;
+    geo.computeVertexNormals();
+    return geo;
+  }
+
+  /* Same idea for a dome/vault: displace along the surface normal of a sphere
+     centred on the group origin, so the ceiling gets a lumpy vault instead of
+     a lampshade. */
+  rockifyDome(geo, amp, ox = 0, oz = 0) {
+    const p = geo.attributes.position;
+    for (let i = 0; i < p.count; i++) {
+      const x = p.getX(i), y = p.getY(i), z = p.getZ(i);
+      const len = Math.hypot(x, y, z);
+      if (len < 1e-3) continue;
+      const n = fbm((x + ox) * .13, (z + oz) * .13 + y * .1, 3);
+      const k = (len + amp * (n - .5) * 2) / len;
+      p.setX(i, x * k); p.setY(i, y * k); p.setZ(i, z * k);
+    }
+    p.needsUpdate = true;
+    geo.computeVertexNormals();
+    return geo;
+  }
 
   m(geo, material, x = 0, y = 0, z = 0, o = {}) {
     const mesh = new Mesh(geo, material);
@@ -6235,11 +6294,14 @@ class Game {
     c.width = 8; c.height = 256;
     const g = c.getContext("2d");
     const grad = g.createLinearGradient(0, 0, 0, 256);
-    grad.addColorStop(0, "#0a1430");
-    grad.addColorStop(.45, "#1b3358");
-    grad.addColorStop(.72, "#4a5a78");
-    grad.addColorStop(.9, "#b08258");
-    grad.addColorStop(1, "#e0a468");
+    grad.addColorStop(0, "#070d24");
+    grad.addColorStop(.28, "#122a4e");
+    grad.addColorStop(.5, "#254368");
+    grad.addColorStop(.66, "#4d5a7c");
+    grad.addColorStop(.78, "#8a6d84");   // the violet band where dusk actually lives
+    grad.addColorStop(.89, "#c08659");
+    grad.addColorStop(.97, "#e8ab6c");
+    grad.addColorStop(1, "#f4c489");
     g.fillStyle = grad; g.fillRect(0, 0, 8, 256);
     const tex = new CanvasTex(c);
     tex.colorSpace = SRGB;
@@ -6264,10 +6326,65 @@ class Game {
        anything below sea level inland — the entrance ravine, the caverns —
        ends up hidden behind a sheet of water. The inner edge sits well inside
        the narrowest point of the coast, where there is always land above it. */
-    const water = this.m(new RingGeo(66, 900, 96, 1),
-      this.mat(0x17405f, { roughness: .34, metalness: .18 }), 0, -.85, 0,
+    /* Two rings: the near one is subdivided and its vertices ride a couple of
+       crossed swells every frame, the far one is a single quad ring that only
+       has to be the right colour. Animating out to 900 units would be 20k
+       vertices of sine for water nobody can see move. */
+    /* low metalness on purpose: there is no environment map in this build, so
+       a metallic surface has nothing to reflect and renders near-black */
+    /* low metalness on purpose: there is no environment map in this build, so
+       a metallic surface has nothing to reflect and renders near-black. The
+       depth gradient comes from vertex colours instead: turquoise over the
+       shallows, ink out where the bottom drops away. */
+    /* roughness is what tames the moon path: any tighter and the cool fill
+       light's specular clips to pure white across a third of the sea */
+    const seaMat = this.mat(0x2a688f, { roughness: .52, metalness: .06, flatShading: true, vertexColors: true });
+    const water = this.m(new RingGeo(66, 260, IS_TOUCH ? 64 : 128, IS_TOUCH ? 12 : 22), seaMat, 0, -.85, 0,
       { rx: -Math.PI / 2, cast: false, recv: true });
+    const far = this.m(new RingGeo(258, 900, 72, 1), seaMat, 0, -.85, 0,
+      { rx: -Math.PI / 2, cast: false });
     this.water = water;
+    {
+      const tint = (geo) => {
+        const p = geo.attributes.position, arr = new Float32Array(p.count * 3);
+        const shallow = new Col(0x6fd8cc), mid = new Col(0x2f86b4), deep = new Col(0x16406b), c = new Col();
+        for (let i = 0; i < p.count; i++) {
+          /* the ring is built in XY and laid down with rx=-90°, so its local
+             +y ends up on world -z; get that wrong and the shallows sit on the
+             wrong side of the island */
+          const wx = p.getX(i), wz = -p.getY(i);
+          const d = Math.hypot(wx, wz);
+          const coast = coastRadius(Math.atan2(wz, wx));
+          /* the ring starts at r=66 but the coast can reach 100+, so the whole
+             gradient is measured from the shoreline, not from the origin —
+             anchored to the ring instead, the turquoise ends up buried under
+             the island and every visible metre of sea is the same navy */
+          c.copy(shallow).lerp(mid, smoothstep(coast + 3, coast + 42, d)).lerp(deep, smoothstep(coast + 40, coast + 140, d));
+          arr[i * 3] = c.r; arr[i * 3 + 1] = c.g; arr[i * 3 + 2] = c.b;
+        }
+        geo.setAttribute("color", new F32Attr(arr, 3));
+      };
+      tint(water.geometry); tint(far.geometry);
+
+      const p = water.geometry.attributes.position;
+      const bx = new Float32Array(p.count), bz = new Float32Array(p.count);
+      for (let i = 0; i < p.count; i++) { bx[i] = p.getX(i); bz[i] = p.getY(i); }
+      this.anims.push(t => {
+        for (let i = 0; i < p.count; i++) {
+          const x = bx[i], z = bz[i];
+          const d = Math.hypot(x, z);
+          /* swells flatten out toward the horizon so the far seam never pops */
+          const k = 1 - smoothstep(150, 250, d);
+          p.setZ(i, (Math.sin(x * .13 + t * 1.15) * .5 + Math.sin(z * .1 - t * .9) * .42
+                   + Math.sin((x + z) * .045 + t * .5) * .3) * k);
+        }
+        p.needsUpdate = true;
+        /* no computeVertexNormals: the material is flat-shaded, so the normal
+           comes from the fragment derivatives and recomputing 6k of them every
+           frame would buy nothing */
+      });
+    }
+    this.outdoorOnly.push(far);
 
     /* laid flat rather than a sprite, so the reflection stays on the sea
        instead of swinging around with the camera */
@@ -6289,8 +6406,12 @@ class Game {
     const pos = geo.attributes.position;
     const colors = new Float32Array(pos.count * 3);
 
-    const SAND = new Col(0x6d5c46), GRASS = new Col(0x2c5733),
-          GRASS2 = new Col(0x3f6b3e), ROCK = new Col(0x4d4a5c), SNOW = new Col(0xcfd6e4);
+    /* A wider palette than sand/grass/rock/snow: a wet band right at the water
+       line, a second warmer green for the low meadows and a bare dirt tone
+       under the steepest faces. Same cost, far less of a painted look. */
+    const WET = new Col(0x4b4437), SAND = new Col(0x7a684e), MEADOW = new Col(0x4b7a3f),
+          GRASS = new Col(0x2c5733), GRASS2 = new Col(0x3f6b3e), DIRT = new Col(0x554634),
+          ROCK = new Col(0x4d4a5c), SNOW = new Col(0xcfd6e4);
     const tmp = new Col();
 
     for (let i = 0; i < pos.count; i++) {
@@ -6308,11 +6429,14 @@ class Game {
 
       const shore = Math.hypot(x, z) / coastRadius(Math.atan2(z, x));
       tmp.copy(GRASS).lerp(GRASS2, tint);
-      tmp.lerp(ROCK, smoothstep(.45, .95, slope));
+      tmp.lerp(MEADOW, smoothstep(4, .5, h) * (.35 + tint * .4));   // lush in the hollows
+      tmp.lerp(DIRT, smoothstep(.35, .7, slope) * .55);
+      tmp.lerp(ROCK, smoothstep(.55, 1, slope));
       tmp.lerp(ROCK, smoothstep(13, 20, h) * .8);
       tmp.lerp(SNOW, smoothstep(20, 27, h));
-      tmp.lerp(SAND, smoothstep(.9, .99, shore));
-      tmp.multiplyScalar(.88 + tint * .24);
+      tmp.lerp(SAND, smoothstep(.88, .975, shore));
+      tmp.lerp(WET, smoothstep(.975, 1.005, shore));
+      tmp.multiplyScalar(.86 + tint * .28);
       colors[i * 3] = tmp.r; colors[i * 3 + 1] = tmp.g; colors[i * 3 + 2] = tmp.b;
     }
     geo.setAttribute("color", new F32Attr(colors, 3));
@@ -6598,6 +6722,14 @@ class Game {
     if (Math.hypot(x - this.pondPos.x, z - this.pondPos.z) < this.pondPos.r + 2) return false;
     if (Math.hypot(x - 15, z - 5) < 14) return false;                        // playground
     if (Math.hypot(x + 12, z + 10) < 8) return false;
+    /* the cave mouth and the ground it is dug into: without this, trees and
+       grass sprout inside the tunnel */
+    {
+      const t = segT(x, z, CAVE_MOUTH, ENTRY_END);
+      const px = CAVE_MOUTH.x + (ENTRY_END.x - CAVE_MOUTH.x) * t;
+      const pz = CAVE_MOUTH.z + (ENTRY_END.z - CAVE_MOUTH.z) * t;
+      if (Math.hypot(x - px, z - pz) < 11) return false;
+    }
     for (const p of ZONE_POS) if (Math.hypot(x - p.x, z - p.z) < p.r + margin) return false;
     for (const s of this.pathSegs) {
       const dx = s.x2 - s.x1, dz = s.z2 - s.z1;
@@ -6715,23 +6847,185 @@ class Game {
       this.m(new ConeGeo(1.8, 2.6, 6), this.mat(0x256240, { flatShading: true }), -4.5, 2.2, -3, { parent: g });
     };
     isle(-205, -150, 1.8); isle(230, -95, 1.3); isle(140, 235, 2.2);
+
+    this.buildGrass();
+    this.buildShore();
+    this.buildOutcrops();
+    this.buildPollen();
+  }
+
+  /* ============ ground cover ============
+     Thousands of separate little meshes would be thousands of draw calls, so
+     every blade on the island goes into one buffer. There is no InstancedMesh
+     in this build and no way to add one, but a merged geometry gets to the
+     same place: one call, one material, and the wind lives in the shape rather
+     than in an update loop. */
+  buildGrass() {
+    const TUFTS = REDUCED ? 0 : (IS_TOUCH ? 380 : 1200);
+    if (!TUFTS) return;
+    const BLADES = 5, tris = TUFTS * BLADES;
+    const pos = new Float32Array(tris * 9), col = new Float32Array(tris * 9);
+    const c = new Col(), A = new Col(0x4a7f45), B = new Col(0x6f9a4a), C = new Col(0x37623a);
+    let placed = 0, guard = 0, v = 0;
+    while (placed < TUFTS && guard++ < TUFTS * 8) {
+      const a = Math.random() * 6.283, r = 17 + Math.sqrt(Math.random()) * 78;
+      const x = Math.cos(a) * r, z = Math.sin(a) * r;
+      if (!this.isClearOf(x, z, 1)) continue;
+      const y = heightAt(x, z);
+      for (let b = 0; b < BLADES; b++) {
+        const ba = Math.random() * 6.283, br = Math.random() * .55;
+        const bx = x + Math.cos(ba) * br, bz = z + Math.sin(ba) * br;
+        const h = .26 + Math.random() * .34, w = .16 + Math.random() * .1;
+        const dir = Math.random() * 6.283, lean = (Math.random() - .5) * .3;
+        const sx = Math.cos(dir), sz = Math.sin(dir);
+        /* two base corners across the blade, one tip leaning downwind */
+        pos[v] = bx - sx * w; pos[v + 1] = y; pos[v + 2] = bz - sz * w;
+        pos[v + 3] = bx + sx * w; pos[v + 4] = y; pos[v + 5] = bz + sz * w;
+        pos[v + 6] = bx + sz * lean; pos[v + 7] = y + h; pos[v + 8] = bz - sx * lean;
+        c.copy(A).lerp(B, Math.random()).lerp(C, Math.random() * .5);
+        for (let k = 0; k < 3; k++) {
+          const s = k === 2 ? 1.25 : .8;      // tips catch the light, roots sit in shade
+          col[v + k * 3] = c.r * s; col[v + k * 3 + 1] = c.g * s; col[v + k * 3 + 2] = c.b * s;
+        }
+        v += 9;
+      }
+      placed++;
+    }
+    const geo = new BufGeo();
+    geo.setAttribute("position", new F32Attr(pos.subarray(0, v), 3));
+    geo.setAttribute("color", new F32Attr(col.subarray(0, v), 3));
+    /* Every normal points straight up rather than out of the blade's own face.
+       A vertical triangle lit by a low sun goes almost black, and a field of
+       black slivers looks like a burnt lawn; borrowing the ground's normal
+       makes the grass sit in the same light as the hill it grows on. */
+    const nrm = new Float32Array(v);
+    for (let i = 1; i < v; i += 3) nrm[i] = 1;
+    geo.setAttribute("normal", new F32Attr(nrm, 3));
+    const mesh = new Mesh(geo, new StdMat({ vertexColors: true, roughness: 1, side: SIDE_DOUBLE }));
+    mesh.receiveShadow = true;
+    this.scene.add(mesh);
+    this.outdoorOnly.push(mesh);
+  }
+
+  /* ============ shoreline ============
+     The coast used to end in a clean sand line. A scatter of wet boulders and
+     driftwood along it gives the silhouette something to bite on. */
+  buildShore() {
+    const n = IS_TOUCH ? 30 : 64;
+    const wet = this.mat(0x3b3a44, { roughness: .55, flatShading: true });
+    const dry = this.mat(0x5a5148, { roughness: 1, flatShading: true });
+    for (let i = 0; i < n; i++) {
+      const a = (i / n) * 6.283 + hash2(i, 3) * .09;
+      const R = coastRadius(a) - 1 + (hash2(i, 7) - .5) * 7;
+      const x = Math.cos(a) * R, z = Math.sin(a) * R;
+      const y = heightAt(x, z);
+      if (y < -2.5) continue;
+      const s = .5 + hash2(i, 11) * 1.7;
+      const rk = this.m(new DodGeo(s, 0), y < .35 ? wet : dry, x, y + s * .3, z, { recv: true });
+      rk.rotation.set(hash2(i, 1) * 3, hash2(i, 2) * 6, hash2(i, 3) * 3);
+      rk.scale.y = .6 + hash2(i, 17) * .5;
+      if (s > 1.3) this.addOccluder(x, y + s * .3, z, s * .8);
+    }
+    /* a few bleached logs above the tide line */
+    for (let i = 0; i < (IS_TOUCH ? 3 : 7); i++) {
+      const a = hash2(i, 23) * 6.283, R = coastRadius(a) - 5 - hash2(i, 29) * 4;
+      const x = Math.cos(a) * R, z = Math.sin(a) * R;
+      const log = this.m(new CylGeo(.28, .34, 3 + hash2(i, 31) * 2.4, 6),
+        this.mat(0x8a7f6d, { roughness: 1, flatShading: true }), x, heightAt(x, z) + .3, z, { recv: true });
+      log.rotation.set(Math.PI / 2, hash2(i, 37) * 6, .12);
+    }
+  }
+
+  /* ============ rock outcrops ============
+     Bare stone breaking out of the hilltops, so the relief reads as an island
+     with bones instead of a green blanket. */
+  buildOutcrops() {
+    let placed = 0, guard = 0;
+    const stone = this.mat(0x585569, { roughness: 1, flatShading: true });
+    const dark = this.mat(0x413f4e, { roughness: 1, flatShading: true });
+    while (placed < (IS_TOUCH ? 5 : 11) && guard++ < 300) {
+      const a = Math.random() * 6.283, r = 30 + Math.random() * 60;
+      const x = Math.cos(a) * r, z = Math.sin(a) * r;
+      if (!this.isClearOf(x, z, 9) || heightAt(x, z) < 5) continue;
+      const y = heightAt(x, z);
+      const g = new Grp(); g.position.set(x, y, z); g.rotation.y = Math.random() * 6;
+      this.scene.add(g); this.outdoorOnly.push(g);
+      const n = 3 + Math.floor(Math.random() * 3);
+      for (let i = 0; i < n; i++) {
+        const s = 1.2 + Math.random() * 1.7;
+        const b = this.m(new DodGeo(s, 0), i % 2 ? stone : dark,
+          (Math.random() - .5) * 5, s * .45, (Math.random() - .5) * 5, { parent: g, recv: true });
+        b.rotation.set(Math.random() * 3, Math.random() * 6, Math.random() * 3);
+        b.scale.y = .7 + Math.random() * .6;
+      }
+      this.addOccluder(x, y + 2, z, 4);
+      placed++;
+    }
+  }
+
+  /* ============ pollen ============
+     Warm motes drifting over the grass. The fireflies already glow; these do
+     not, they only catch the last of the sun, which is what sells the hour. */
+  buildPollen() {
+    const count = REDUCED ? 0 : (IS_TOUCH ? 40 : 120);
+    if (!count) return;
+    const geo = new BufGeo(), arr = new Float32Array(count * 3), base = [];
+    for (let i = 0; i < count; i++) {
+      const a = Math.random() * 6.283, r = 12 + Math.random() * 82;
+      const x = Math.cos(a) * r, z = Math.sin(a) * r;
+      const y = Math.max(0, heightAt(x, z)) + .8 + Math.random() * 5;
+      arr[i * 3] = x; arr[i * 3 + 1] = y; arr[i * 3 + 2] = z;
+      base.push({ x, y, z, ph: Math.random() * 6.283, sp: .16 + Math.random() * .22 });
+    }
+    geo.setAttribute("position", new F32Attr(arr, 3));
+    const pts = new Points3(geo, new PointsMat({ color: 0xffe2b0, size: .42, map: this.radialTexture(),
+      transparent: true, opacity: .45, depthWrite: false, blending: BLEND_ADD }));
+    this.scene.add(pts);
+    this.outdoorOnly.push(pts);
+    this.anims.push(t => {
+      const a = pts.geometry.attributes.position.array;
+      for (let i = 0; i < base.length; i++) {
+        const b = base[i];
+        a[i * 3] = b.x + Math.sin(t * b.sp + b.ph) * 3.5 + t * .35 % 6;
+        a[i * 3 + 1] = b.y + Math.sin(t * b.sp * 1.3 + b.ph) * 1.1;
+        a[i * 3 + 2] = b.z + Math.cos(t * b.sp * .8 + b.ph) * 3.5;
+      }
+      pts.geometry.attributes.position.needsUpdate = true;
+      pts.material.opacity = .3 + Math.sin(t * .9) * .12;
+    });
   }
 
   /* ============ sky: clouds, stars, balloon, birds ============ */
   buildSky() {
-    /* stars */
-    const starGeo = new BufGeo();
-    const sarr = new Float32Array(300 * 3);
-    for (let i = 0; i < 300; i++) {
-      const a = Math.random() * Math.PI * 2, e = Math.random() * .55, R = 260;
-      sarr[i * 3] = Math.cos(a) * Math.cos(e) * R;
-      sarr[i * 3 + 1] = 70 + Math.random() * 130;
-      sarr[i * 3 + 2] = Math.sin(a) * Math.cos(e) * R;
+    /* Stars, in two layers: a dense faint field and a sparse bright one. One
+       uniform size reads as noise; two reads as a sky. */
+    for (const [n, size, opa, col] of [[520, .75, .55, 0xbfd2ff], [90, 1.7, .95, 0xf0f4ff]]) {
+      const starGeo = new BufGeo();
+      const sarr = new Float32Array(n * 3);
+      for (let i = 0; i < n; i++) {
+        const a = Math.random() * Math.PI * 2, e = Math.random() * .55, R = 260;
+        sarr[i * 3] = Math.cos(a) * Math.cos(e) * R;
+        sarr[i * 3 + 1] = 60 + Math.random() * 150;
+        sarr[i * 3 + 2] = Math.sin(a) * Math.cos(e) * R;
+      }
+      starGeo.setAttribute("position", new F32Attr(sarr, 3));
+      const stars = new Points3(starGeo, new PointsMat({ color: col, size, map: this.radialTexture(),
+        transparent: true, opacity: opa, depthWrite: false, blending: BLEND_ADD }));
+      this.scene.add(stars);
+      this.outdoorOnly.push(stars);
+      this.anims.push(t => { stars.material.opacity = opa * (.82 + Math.sin(t * .5 + n) * .18); });
     }
-    starGeo.setAttribute("position", new F32Attr(sarr, 3));
-    const stars = new Points3(starGeo, new PointsMat({ color: 0xcfe0ff, size: .8, transparent: true, opacity: .75, depthWrite: false }));
-    this.scene.add(stars);
-    this.outdoorOnly.push(stars);
+
+    /* the moon, opposite the sun, with a halo */
+    const moonPos = new V3(-130, 125, 160);
+    const moon = this.m(new SphGeo(6, 20, 16), this.bmat(0xdae3f6), moonPos.x, moonPos.y, moonPos.z,
+      { cast: false });
+    moon.material.fog = false;
+    /* an additive halo this size reads as a lens flare across a third of the
+       sky; keep it just wide enough to soften the disc */
+    const halo = this.glowSprite(0x7d94c4, 22, moonPos);
+    this.scene.add(halo);
+    this.outdoorOnly.push(moon, halo);
 
     /* sun glow on horizon */
     const sunA = this.glowSprite(0xd8a878, 78, new V3(90, 62, -160));
@@ -7763,12 +8057,19 @@ class Game {
     const G = new Grp(); this.scene.add(G);
     this.caveGrp = G;
     this.caveSpots = [];
-    this.rock = this.mat(0x5f5670, { roughness: 1, flatShading: true });
-    this.rockDark = this.mat(0x413a4e, { roughness: 1, flatShading: true });
-    this.rockWall = new StdMat({ color: 0x4e4660, roughness: 1, flatShading: true, side: SIDE_BACK });
+    this.rock = this.mat(0x6c6280, { roughness: 1, flatShading: true });
+    this.rockDark = this.mat(0x4a4257, { roughness: 1, flatShading: true });
+    this.rockWall = new StdMat({ color: 0x5c5471, roughness: 1, flatShading: true, side: SIDE_BACK });
+    /* A mottled floor keeps the big flat discs from reading as painted metal;
+       the wall is faceted enough to carry itself. */
+    this.rockFloor = new StdMat({
+      map: this.noiseTexture("#453e52", ["#3a3446", "#514a61", "#4c4458", "#5a5268"], 340, 9),
+      roughness: 1
+    });
 
     for (const [ka, kb, w] of CAVE_EDGES) this.corridor(G, CAVE_NODES[ka], CAVE_NODES[kb], w);
     for (const k in CAVE_NODES) this.chamber(G, CAVE_NODES[k], k);
+    this.caveMotes();
 
     this.buildEntrance();
     this.buildGateRoom();
@@ -7788,9 +8089,60 @@ class Game {
     }
   }
 
-  /* A corridor runs from one chamber wall to the other, not centre to
-     centre: a tunnel stub buried inside a chamber is exactly what shows up
-     as walls stacked on top of each other. */
+  /* Dust hanging in the lamplight. One Points cloud for the whole cave, parented
+     to caveGrp — which lives 4km away — so it never has to be toggled. */
+  caveMotes() {
+    const count = REDUCED ? 0 : (IS_TOUCH ? 90 : 240);
+    if (!count) return;
+    const keys = Object.keys(CAVE_NODES);
+    const geo = new BufGeo(), arr = new Float32Array(count * 3);
+    const base = [];
+    for (let i = 0; i < count; i++) {
+      const n = CAVE_NODES[keys[i % keys.length]];
+      const a = hash2(i, 5) * 6.28, r = Math.sqrt(hash2(i, 9)) * (n.r - 1);
+      const x = n.x + Math.cos(a) * r, y = CAVE_Y + .6 + hash2(i, 13) * (n.head - 3), z = n.z + Math.sin(a) * r;
+      arr[i * 3] = x; arr[i * 3 + 1] = y; arr[i * 3 + 2] = z;
+      base.push({ x, y, z, ph: hash2(i, 21) * 6.28, sp: .3 + hash2(i, 27) * .5 });
+    }
+    geo.setAttribute("position", new F32Attr(arr, 3));
+    const pts = new Points3(geo, new PointsMat({
+      color: 0xa8e4ff, size: .5, map: this.radialTexture(),
+      transparent: true, opacity: .5, depthWrite: false, blending: BLEND_ADD }));
+    this.caveGrp.add(pts);
+    this.anims.push(t => {
+      const a2 = pts.geometry.attributes.position.array;
+      for (let i = 0; i < base.length; i++) {
+        const b = base[i];
+        a2[i * 3] = b.x + Math.sin(t * b.sp + b.ph) * 1.4;
+        a2[i * 3 + 1] = b.y + Math.sin(t * b.sp * .7 + b.ph * 1.7) * .9;
+        a2[i * 3 + 2] = b.z + Math.cos(t * b.sp * .8 + b.ph) * 1.4;
+      }
+      pts.geometry.attributes.position.needsUpdate = true;
+      pts.material.opacity = .35 + Math.sin(t * 1.3) * .15;
+    });
+  }
+
+  /* still water on the cave floor: dark, low-roughness disc with a lit rim */
+  cavePuddle(parent, x, z, r, col) {
+    this.m(new CircleGeo(r, 26), this.mat(0x0b1520, { roughness: .08, metalness: .6 }),
+      x, .09, z, { rx: -Math.PI / 2, cast: false, parent });
+    const rim = this.m(new RingGeo(r - .35, r + .25, 26),
+      this.bmat(col, { transparent: true, opacity: .3, side: SIDE_DOUBLE }),
+      x, .11, z, { rx: -Math.PI / 2, cast: false, parent });
+    this.anims.push(t => { rim.material.opacity = .18 + Math.sin(t * 1.1 + x) * .12; });
+    for (let i = 0; i < 5; i++) {
+      const a = hash2(i, Math.round(x)) * 6.28, rr = r * (1.05 + hash2(i, 3) * .25);
+      const s = .25 + hash2(i, 8) * .4;
+      this.m(new DodGeo(s, 0), this.rockDark, x + Math.cos(a) * rr, s * .4, z + Math.sin(a) * rr,
+        { parent, recv: true, ry: hash2(i, 12) * 6 });
+    }
+  }
+
+  /* A corridor is a round tunnel bored between two chamber walls, not centre
+     to centre: a tunnel stub buried inside a chamber is exactly what shows up
+     as walls stacked on top of each other. The tube is inside-out (BACK side)
+     and displaced by noise, so it reads as rock rather than as plumbing, and
+     it is wide enough that confineToCave never lets the cat touch it. */
   corridor(parent, a, b, w) {
     const dx = b.x - a.x, dz = b.z - a.z;
     const dist = Math.hypot(dx, dz);
@@ -7799,17 +8151,37 @@ class Game {
     const len = dist - from - to;
     if (len < 2) return;
     const mid = from + len / 2;
-    const H = CORRIDOR_H;
+    const R = TUNNEL_R;
 
     const g = new Grp();
     g.position.set(a.x + Math.sin(ang) * mid, CAVE_Y, a.z + Math.cos(ang) * mid);
     g.rotation.y = ang;
     parent.add(g);
 
-    this.m(new BoxGeo(w * 2, 1, len + 2.4), this.rock, 0, -.5, 0, { parent: g, cast: false, recv: true });
-    this.m(new BoxGeo(1.4, H, len + 2.4), this.rockDark, -(w + .7), H / 2, 0, { parent: g, recv: true });
-    this.m(new BoxGeo(1.4, H, len + 2.4), this.rockDark, w + .7, H / 2, 0, { parent: g, recv: true });
-    this.m(new BoxGeo(w * 2 + 3, 1.2, len + 2.4), this.rockDark, 0, H, 0, { parent: g, cast: false });
+    /* the bore. Built along its own Y then tipped onto Z, which is also the
+       axis rockify() displaces around. */
+    const tube = new Mesh(
+      this.rockify(new CylGeo(R, R, len + 3, 22, Math.max(3, Math.round(len / 5)), true), 1.3,
+                   g.position.x, g.position.z),
+      this.rockWall);
+    tube.rotation.x = Math.PI / 2;
+    g.add(tube);
+
+    /* floor: wider than the bore, so it caps the lower half of the tube from
+       the inside and no sliver of the underside is ever visible */
+    this.m(new BoxGeo((R + 1.5) * 2, 1.4, len + 3), this.rockFloor, 0, -.7, 0,
+      { parent: g, cast: false, recv: true });
+
+    /* rubble along the walls, to break the perfect circle at eye level */
+    const nr = Math.max(2, Math.round(len / 5));
+    for (let i = 0; i < nr; i++) {
+      const side = hash2(i, 3) > .5 ? 1 : -1;
+      const lz = ((i + .5) / nr - .5) * len;
+      const s = .5 + hash2(i, 11) * 1.3;
+      const rk = this.m(new DodGeo(s, 0), i % 2 ? this.rock : this.rockDark,
+        side * (w + .9 + hash2(i, 17) * .8), s * .5, lz, { parent: g, recv: true });
+      rk.rotation.set(hash2(i, 1) * 3, hash2(i, 2) * 6, hash2(i, 3) * 3);
+    }
 
     const n = Math.max(1, Math.round(len / 14));
     for (let i = 0; i < n; i++) {
@@ -7818,7 +8190,7 @@ class Game {
       const col = [0x7ce8e0, 0x8fb0ff, 0x9fe8d0][i % 3];
       const c = this.m(new OctGeo(.32, 0),
         new StdMat({ color: col, emissive: new Col(col), emissiveIntensity: 1.3, roughness: .2, flatShading: true }),
-        side * w, 3.4, lz, { parent: g, cast: false });
+        side * (w + .6), 3.4, lz, { parent: g, cast: false });
       c.scale.y = 1.6;
       const wx = g.position.x + Math.cos(ang) * side * w + Math.sin(ang) * lz;
       const wz = g.position.z - Math.sin(ang) * side * w + Math.cos(ang) * lz;
@@ -7830,48 +8202,96 @@ class Game {
 
   /* A chamber wall is built as arcs between its doorways rather than one
      closed cylinder, so corridors open into it instead of intersecting it.
-     Above corridor height the ring closes up again. */
+     Above corridor height the ring closes up, and a lumpy vault caps it. */
   chamber(parent, n, key) {
     const g = new Grp(); g.position.set(n.x, CAVE_Y, n.z); parent.add(g);
     const R = n.r + 2;
-    this.m(new CylGeo(R, R, 1, 40), this.rock, 0, -.5, 0, { parent: g, cast: false, recv: true });
-    this.m(new CylGeo(R + 1, R + 1, 1.2, 40), this.rockDark, 0, n.head + 1, 0, { parent: g, cast: false });
+    this.m(new CylGeo(R + 1.4, R + 1.4, 1, 44), this.rockFloor, 0, -.5, 0,
+      { parent: g, cast: false, recv: true });
 
     /* where the corridors arrive, as angles measured the way CylinderGeometry
-       measures theta: atan2(x, z) */
+       measures theta: atan2(x, z). The opening has to clear the whole bore,
+       not just the walkable width, or the tube clips the wall it comes through. */
     const doors = [];
     for (const [ka, kb, w] of CAVE_EDGES) {
       const other = ka === key ? CAVE_NODES[kb] : kb === key ? CAVE_NODES[ka] : null;
       if (!other) continue;
-      doors.push({ a: Math.atan2(other.x - n.x, other.z - n.z), half: Math.atan2(w + 1.4, R) });
+      doors.push({ a: Math.atan2(other.x - n.x, other.z - n.z), half: Math.atan2(TUNNEL_R + .8, R) });
     }
     doors.sort((p, q) => p.a - q.a);
 
     const H = CORRIDOR_H;
-    if (!doors.length) {
-      const w0 = new Mesh(new CylGeo(R, R, H, 40, 1, true), this.rockWall);
-      w0.position.y = H / 2; g.add(w0);
-    } else {
-      for (let i = 0; i < doors.length; i++) {
-        const from = doors[i].a + doors[i].half;
-        const to = doors[(i + 1) % doors.length].a - doors[(i + 1) % doors.length].half
-                 + (i === doors.length - 1 ? Math.PI * 2 : 0);
-        const span = to - from;
-        if (span <= .04) continue;
-        const seg = new Mesh(new CylGeo(R, R, H, Math.max(3, Math.round(span * 8)), 1, true, from, span), this.rockWall);
-        seg.position.y = H / 2; g.add(seg);
-      }
+    const arc = (from, span, h, y0) => {
+      const segs = Math.max(4, Math.round(span * 14));
+      const seg = new Mesh(this.rockify(new CylGeo(R, R, h, segs, 4, true, from, span), 1.7, n.x, n.z),
+        this.rockWall);
+      seg.position.y = y0 + h / 2; g.add(seg);
+    };
+    if (!doors.length) arc(0, Math.PI * 2, H, 0);
+    else for (let i = 0; i < doors.length; i++) {
+      const from = doors[i].a + doors[i].half;
+      const to = doors[(i + 1) % doors.length].a - doors[(i + 1) % doors.length].half
+               + (i === doors.length - 1 ? Math.PI * 2 : 0);
+      if (to - from > .04) arc(from, to - from, H, 0);
     }
-    /* above the doorways the wall is continuous again */
-    const upper = new Mesh(new CylGeo(R, R, n.head + 1 - H, 40, 1, true), this.rockWall);
-    upper.position.y = H + (n.head + 1 - H) / 2; g.add(upper);
+    arc(0, Math.PI * 2, n.head + 1 - H, H);          // continuous above the doorways
 
+    /* carved arch around each opening, hiding the corner where the round bore
+       meets the round wall */
+    for (const d of doors) {
+      const A = new Grp();
+      A.position.set(Math.sin(d.a) * (R - .4), 0, Math.cos(d.a) * (R - .4));
+      A.rotation.y = d.a;
+      g.add(A);
+      this.m(new TorusGeo(TUNNEL_R + .5, .75, 6, 20, Math.PI), this.rockDark,
+        0, 0, 0, { parent: A, recv: true });
+      for (const s of [-1, 1])
+        this.m(new BoxGeo(1.5, TUNNEL_R + .4, 1.5), this.rockDark,
+          s * (TUNNEL_R + .5), (TUNNEL_R + .4) / 2, 0, { parent: A, recv: true });
+    }
+
+    /* the vault, and the teeth hanging from it */
+    const domeH = Math.max(4, R * .42);
+    const dome = new Mesh(
+      this.rockifyDome(new SphGeo(R, 34, 12, 0, Math.PI * 2, 0, Math.PI / 2), 1.8, n.x, n.z),
+      this.rockWall);
+    dome.scale.y = domeH / R;
+    dome.position.y = n.head + .6;
+    g.add(dome);
+    this.m(new CylGeo(R + .9, R + .9, 1.6, 44), this.rockDark, 0, n.head + .6, 0,
+      { parent: g, cast: false });
+
+    for (let i = 0; i < 14; i++) {
+      const a = hash2(i, Math.round(n.z)) * 6.28, rr = R * (.28 + hash2(i, 31) * .6);
+      const h = 1.6 + hash2(i, 41) * 3.4;
+      const tip = this.m(new ConeGeo(.35 + hash2(i, 7) * .5, h, 5), i % 2 ? this.rock : this.rockDark,
+        Math.cos(a) * rr, n.head + 1.2 - h / 2, Math.sin(a) * rr, { parent: g, cast: false });
+      tip.rotation.x = Math.PI;
+    }
+
+    /* Veins of crystal in the rock. Emissive only — they read through bloom
+       without a light each, which matters when the pool is eight slots wide. */
+    const vein = CAVE_TINT[key] || 0x7ce8e0;
+    const veinMat = new StdMat({ color: vein, emissive: new Col(vein), emissiveIntensity: 1.1,
+                                 roughness: .25, flatShading: true });
+    for (let i = 0; i < 16; i++) {
+      const a = hash2(i, Math.round(n.z) + 3) * 6.28;
+      const y = 1.2 + hash2(i, 51) * (n.head - 4);
+      const s = .16 + hash2(i, 61) * .3;
+      const c = this.m(new OctGeo(s, 0), veinMat,
+        Math.sin(a) * (R - .9), y, Math.cos(a) * (R - .9), { parent: g, cast: false });
+      c.scale.y = 1.4 + hash2(i, 71) * 2.2;
+      c.rotation.y = a;
+      c.rotation.z = (hash2(i, 81) - .5) * .8;
+    }
+
+    /* stalagmites hugging the wall, well clear of the middle */
     for (let i = 0; i < 10; i++) {
-      const a = hash2(i, Math.round(n.x)) * 6.28, r = n.r * (.78 + hash2(i, 9) * .16);
+      const a = hash2(i, Math.round(n.x)) * 6.28, r = n.r * (.84 + hash2(i, 9) * .13);
       const h = 1.8 + hash2(i, 21) * 3;
       this.m(new ConeGeo(.5 + hash2(i, 5) * .6, h, 6), i % 3 ? this.rock : this.rockDark,
         Math.cos(a) * r, h / 2, Math.sin(a) * r, { parent: g, recv: true });
-      this.addOccluder(n.x + Math.cos(a) * r, CAVE_Y + h / 2, n.z + Math.sin(a) * r, .7 + h * .12);
+      this.addOccluder(n.x + Math.cos(a) * r, CAVE_Y + h / 2, n.z + Math.sin(a) * r, .55 + h * .1);
     }
   }
 
@@ -7881,13 +8301,13 @@ class Game {
     for (let k = 0; k < 3; k++) {
       const sh = (1.4 + hash2(k, Math.round(x)) * 1.8) * scale;
       const c = this.m(new OctGeo((.35 + hash2(k, 3) * .35) * scale, 0),
-        new StdMat({ color: col, emissive: new Col(col), emissiveIntensity: 1.1, roughness: .2, flatShading: true }),
+        new StdMat({ color: col, emissive: new Col(col), emissiveIntensity: .75, roughness: .2, flatShading: true }),
         (hash2(k, 5) - .5) * 2 * scale, sh * .5, (hash2(k, 7) - .5) * 2 * scale, { parent: cl, cast: false });
       c.scale.y = sh;
     }
-    parent.add(this.glowSprite(col, 2.2 * scale, new V3(x, y + 1.5, z)));
+    parent.add(this.glowSprite(col, 1.8 * scale, new V3(x, y + 1.5, z)));
     this.addOccluder(parent.position.x + x, CAVE_Y + y + 1.6, parent.position.z + z, 1.7 * scale);
-    return this.addLight(parent.position.x + x, CAVE_Y + y + 2, parent.position.z + z, col, 7 * scale, 24 * scale);
+    return this.addLight(parent.position.x + x, CAVE_Y + y + 2, parent.position.z + z, col, 4.5 * scale, 22 * scale);
   }
 
   /* a themed altar, one per chamber, in place of an arcade cabinet */
@@ -7904,8 +8324,8 @@ class Game {
       orb.rotation.y = t * .8; orb.rotation.x = t * .3;
       orb.position.y = 3.3 + Math.sin(t * 1.4) * .22;
     });
-    A.add(this.glowSprite(col, 3, new V3(0, 3.3, 0)));
-    this.addLight(node.x, CAVE_Y + 3.4, node.z, col, 9, 26);
+    A.add(this.glowSprite(col, 2.4, new V3(0, 3.3, 0)));
+    this.addLight(node.x, CAVE_Y + 3.4, node.z, col, 5.5, 22);
     this.addOccluder(node.x, CAVE_Y + 1.4, node.z, 1.9);
     const lbl = this.makeLabel(L(opts.label), "#" + new Col(col).getHexString(), 1.3);
     lbl.position.set(0, 5.6, 0); A.add(lbl);
@@ -7918,76 +8338,177 @@ class Game {
   }
 
   /* ---- the entrance on the island ----
-     A rock mound with an arch and a short, straight, level corridor running
-     into it. No slope, no carving of the terrain: the ground here is already
-     flattened, so the corridor is just boxes sitting on it and nothing can
-     intersect anything. Walk to the far end and the crossing happens. */
+     A gash in the foot of the western ridge: a wall of boulders with a bored
+     tunnel through it, a short walk from the plaza instead of out in the far
+     corner. Level all the way — the pad it sits on is carved flat, so nothing
+     here is dug under walkable terrain and nothing can be drawn over the cat.
+     Walk far enough in and the crossing happens. */
   buildEntrance() {
     const M = new Grp();
     M.position.set(CAVE_MOUTH.x, 0, CAVE_MOUTH.z);
-    M.rotation.y = ENTRY_DIR;                 // local -Z runs into the hill
+    M.rotation.y = ENTRY_DIR;                 // local +Z runs into the hill
     this.scene.add(M);
-    const stone = this.mat(0x59516a, { roughness: 1, flatShading: true });
-    const dark = this.mat(0x3f374c, { roughness: 1, flatShading: true });
+    const stone = this.mat(0x4f4c57, { roughness: 1, flatShading: true });
+    const dark = this.mat(0x36343d, { roughness: 1, flatShading: true });
+    const pale = this.mat(0x615d68, { roughness: 1, flatShading: true });
+    const R = ENTRY_HALF + 3;
+    /* world position of a point given in the group's local frame */
+    const W = (dx, dz) => ({ x: CAVE_MOUTH.x + Math.cos(ENTRY_DIR) * dx + Math.sin(ENTRY_DIR) * dz,
+                             z: CAVE_MOUTH.z - Math.sin(ENTRY_DIR) * dx + Math.cos(ENTRY_DIR) * dz });
 
-    /* Local +Z runs into the hill, matching entryAxis(). Getting this sign
-       wrong built the whole corridor out over the plaza instead. */
-    [[0, 3, ENTRY_LEN + 2, 11], [-9, 2, ENTRY_LEN * .6, 7], [9, 2, ENTRY_LEN * .6, 7],
-     [-8, 1.5, 3, 5.5], [8, 1.5, 3, 5.5], [0, 8, ENTRY_LEN * .75, 6]]
-      .forEach(([dx, dy, dz, r], i) => {
-        const b = this.m(new IcoGeo(r, 0), i % 2 ? stone : dark, dx, dy, dz, { parent: M, recv: true });
-        b.rotation.set(hash2(i, 1) * 3, hash2(i, 2) * 6, hash2(i, 3) * 3);
-        this.addOccluder(CAVE_MOUTH.x + Math.cos(ENTRY_DIR) * dx + Math.sin(ENTRY_DIR) * dz,
-                         dy, CAVE_MOUTH.z - Math.sin(ENTRY_DIR) * dx + Math.cos(ENTRY_DIR) * dz, r * .8);
-      });
+    /* ---- the rock face ----
+       Slabs, not boulders: a wall of tall boxes with a gap in the middle reads
+       as a cliff, where a pile of icosahedra reads as a pile of icosahedra.
+       Each one is turned a few degrees so the face is never a flat plane. */
+    const face = (dx, dz, w, h, d, m, tilt, y0 = -1) => {
+      const b = this.m(new BoxGeo(w, h, d), m, dx, y0 + h / 2, dz, { parent: M, recv: true });
+      b.rotation.y = tilt;
+      b.rotation.z = tilt * .35;
+      const p = W(dx, dz);
+      this.addOccluder(p.x, y0 + h * .45, p.z, Math.max(w, d) * .55);
+    };
+    for (let i = 0; i < 5; i++) {
+      const off = R + 5.4 + i * 4.2;      // clear of the bore, tilt included
+      for (const s of [-1, 1]) {
+        const h = 13 - i * 1.6 + hash2(i, s + 3) * 3;
+        face(s * off, 1.5 - i * .7 + hash2(i, s) * 2, 5.4 + hash2(i, 7) * 2.4, h,
+             5 + hash2(i, 11) * 3, i % 2 ? stone : dark, (hash2(i, s + 9) - .5) * .5);
+      }
+    }
+    /* The mass carrying the tunnel over your head. Everything here starts
+       above the bore — a slab that dips into it would be drawn in front of the
+       inside of the tunnel, which is exactly the overlap this whole layout
+       exists to avoid. */
+    const LID = R + 2.2;
+    face(0, 3.5, R * 2 + 9, 7, 9, dark, .1, LID);
+    face(-5, 11, 14, 9, 12, stone, -.18, LID + 1.5);
+    face(6, 12, 15, 10, 12, dark, .22, LID + .5);
+    face(0, 25, 28, 13, 16, stone, .06, LID - 3);
+    /* loose scree at the foot of the face */
+    for (let i = 0; i < 9; i++) {
+      const dx = (hash2(i, 2) - .5) * 26, dz = -3 + hash2(i, 5) * 5;
+      if (Math.abs(dx) < R + 1.4) continue;
+      const s = .5 + hash2(i, 8) * 1.2;
+      const rk = this.m(new DodGeo(s, 0), i % 2 ? stone : pale, dx, s * .45, dz, { parent: M, recv: true });
+      rk.rotation.set(hash2(i, 1) * 3, hash2(i, 2) * 6, hash2(i, 3) * 3);
+    }
 
-    /* corridor: floor slab, two walls, flat roof — all axis aligned */
-    const H = 7;
-    this.m(new BoxGeo(ENTRY_HALF * 2, .4, ENTRY_LEN + 2), this.mat(0x554d63, { roughness: 1 }),
-      0, .1, ENTRY_LEN / 2, { parent: M, cast: false, recv: true });
-    for (const s2 of [-1, 1])
-      this.m(new BoxGeo(1.6, H, ENTRY_LEN + 2), dark, s2 * (ENTRY_HALF + .8), H / 2, ENTRY_LEN / 2,
-        { parent: M, recv: true });
-    this.m(new BoxGeo(ENTRY_HALF * 2 + 3.2, 1.2, ENTRY_LEN), dark, 0, H, ENTRY_LEN / 2 + 1, { parent: M });
-
-    /* the arch you walk through */
-    this.m(new BoxGeo(2.2, H + 2, 2.2), stone, -(ENTRY_HALF + 1), (H + 2) / 2, 0, { parent: M, recv: true });
-    this.m(new BoxGeo(2.2, H + 2, 2.2), stone, ENTRY_HALF + 1, (H + 2) / 2, 0, { parent: M, recv: true });
-    this.m(new BoxGeo(ENTRY_HALF * 2 + 5, 1.6, 2.4), stone, 0, H + 2, 0, { parent: M });
-
-    /* black plane at the far end so the corridor reads as bottomless */
-    this.m(new PlaneGeo(ENTRY_HALF * 2, H), this.bmat(0x04040a), 0, H / 2, ENTRY_LEN + .9,
+    /* ---- the bore: same round tunnel as underground, capped in black ----
+       The bore is a thin shell, so on its own it leaves a slit of daylight
+       running right through the cliff above and beside it. A solid frame of
+       three boxes closes the tunnel in on every side but the front; the
+       decorative slabs above only have to look like rock, not seal it. */
+    const AMP = .5, IN = R + AMP + .2;
+    const tube = new Mesh(
+      this.rockify(new CylGeo(R, R, ENTRY_LEN + 4, 20, 5, true), AMP, CAVE_MOUTH.x, CAVE_MOUTH.z),
+      this.rockWall);
+    tube.rotation.x = Math.PI / 2;
+    tube.position.set(0, 0, ENTRY_LEN / 2 + 1);
+    M.add(tube);
+    const TL = ENTRY_LEN + 5, TZ = ENTRY_LEN / 2 + 1.5;
+    for (const s of [-1, 1])
+      this.m(new BoxGeo(7, IN * 2 + 7, TL), dark, s * (IN + 3.5), 0, TZ, { parent: M, recv: true });
+    this.m(new BoxGeo(IN * 2 + 14, 7, TL), dark, 0, IN + 3.5, TZ, { parent: M, recv: true });
+    /* floor: just proud of the terrain, which is carved flat here and would
+       otherwise z-fight its way up through the tunnel in patches */
+    this.m(new BoxGeo(IN * 2, 1.2, TL), this.mat(0x4b4356, { roughness: 1 }),
+      0, -.54, TZ, { parent: M, cast: false, recv: true });
+    this.m(new CircleGeo(R, 20), this.bmat(0x03040a), 0, 0, ENTRY_LEN + 2.4,
       { parent: M, cast: false, ry: Math.PI });
+    this.m(new BoxGeo(IN * 2 + 1, IN * 2 + 1, 1.2), dark, 0, 0, ENTRY_LEN + 4, { parent: M });
 
-    /* crystals leading you in */
+    /* the carved arch you step through. TorusGeometry is built in the XY
+       plane with its axis on Z, which is already the tunnel axis here. */
+    this.m(new TorusGeo(R + .5, .9, 6, 22, Math.PI), pale, 0, 0, -.7, { parent: M, recv: true });
+    for (const s of [-1, 1])
+      this.m(new BoxGeo(1.9, R + .5, 1.9), pale, s * (R + 1.4), (R + .5) / 2 - 1, -.7, { parent: M, recv: true });
+    /* Keystone with a cat's paw cut into it — the only man-made thing here. It
+       has to stand proud of the frame; flush with it, the frame swallows it. */
+    const key = R + 2.2;
+    this.m(new BoxGeo(3, 2, 2), stone, 0, key, -1.2, { parent: M });
+    const glyph = this.mat(0x7ce8e0, { emissive: new Col(0x7ce8e0), emissiveIntensity: 1.1 });
+    for (let i = 0; i < 4; i++)
+      this.m(new SphGeo(.17, 8, 6), glyph, -.66 + i * .44, key + .52 + (i === 0 || i === 3 ? -.16 : .08), -.15,
+        { parent: M, cast: false });
+    this.m(new SphGeo(.34, 8, 6), glyph, 0, key - .32, -.15, { parent: M, cast: false });
+
+    /* boulders piled against the face, so the cliff is not one flat wall */
+    for (let i = 0; i < 7; i++) {
+      const s = 1.3 + hash2(i, 13) * 2.4;
+      const dx = (i % 2 ? 1 : -1) * (R + 2.4 + hash2(i, 5) * 6);
+      const dy = hash2(i, 9) * 8;
+      const b = this.m(new IcoGeo(s, 0), i % 2 ? stone : pale, dx, dy, -2.2 - hash2(i, 17) * 1.6,
+        { parent: M, recv: true });
+      b.rotation.set(hash2(i, 1) * 3, hash2(i, 2) * 6, hash2(i, 3) * 3);
+    }
+
+    /* crystals leading you in, and the glow that spills out of the mouth */
     for (let i = 0; i < 4; i++) {
       const sd = i % 2 ? 1 : -1;
+      const dz = 2.6 + i * 3;
       const c = this.m(new OctGeo(.3, 0),
         new StdMat({ color: 0x7ce8e0, emissive: new Col(0x7ce8e0), emissiveIntensity: 1.3, roughness: .2, flatShading: true }),
-        sd * ENTRY_HALF, 2.6, 3 + i * 3.6, { parent: M, cast: false });
+        sd * (ENTRY_HALF + .5), 2.4, dz, { parent: M, cast: false });
       c.scale.y = 1.5;
-      const p = entryAxis((3 + i * 3.6) / ENTRY_LEN);
-      this.addLight(p.x + Math.cos(ENTRY_DIR) * sd * ENTRY_HALF, 2.6,
-                    p.z - Math.sin(ENTRY_DIR) * sd * ENTRY_HALF, 0x7ce8e0, 5, 16);
+      const w = W(sd * (ENTRY_HALF + .5), dz);
+      this.addLight(w.x, 2.4, w.z, 0x7ce8e0, 5, 16);
     }
-    this.addLight(CAVE_MOUTH.x, 2.4, CAVE_MOUTH.z, 0x7ce8e0, 7, 18);
-    M.add(this.glowSprite(0x7ce8e0, 2.6, new V3(0, 1.2, 1)));
+    this.addLight(CAVE_MOUTH.x, 2.4, CAVE_MOUTH.z, 0x7ce8e0, 7, 20);
+    /* the glow reads as light spilling out of the tunnel, so it belongs inside
+       it — parked at the threshold it just covered the opening */
+    M.add(this.glowSprite(0x7ce8e0, 2.4, new V3(0, 1.8, 5)));
 
-    /* Deliberately understated: no wooden sign, no big floating name, and a
-       screen of pines around it. The entrance is meant to be found, so it
-       only announces itself once you are almost on top of it. */
-    const lbl = this.makeLabel(state.lang === "es" ? "Cuevas de Cristal" : "Crystal Caves", "#7ce8e0", 1.3);
-    lbl.position.set(CAVE_MOUTH.x, 7.5, CAVE_MOUTH.z);
+    /* two braziers marking the threshold */
+    for (const s of [-1, 1]) {
+      const bx = s * (R + 3.4), bz = -2.6;
+      this.m(new CylGeo(.5, .7, 1.5, 7), dark, bx, .75, bz, { parent: M, recv: true });
+      this.m(new CylGeo(.75, .5, .5, 7), pale, bx, 1.7, bz, { parent: M });
+      const w = W(bx, bz);
+      this.makeFire(w.x, 2, w.z, .55, 0x7ce8e0);
+    }
+
+    /* ---- finding it: a spur of trodden ground off the plaza road, and a
+       line of cairns with a lit shard on top. Enough of a trail to follow,
+       not so much that the place stops feeling like a find. ---- */
+    const spurTex = this.noiseTexture("#33302a", ["#2a2823", "#3d3931", "#37332c"], 160, 1);
+    spurTex.repeat.set(1, 6);
+    const spur = this.m(new PlaneGeo(3, 26), new StdMat({ map: spurTex, roughness: 1, transparent: true, opacity: .85 }),
+      0, .05, -15, { parent: M, rx: -Math.PI / 2, cast: false, recv: true });
+    spur.rotation.z = Math.PI;
+    for (let i = 0; i < 3; i++) {
+      const dz = -8 - i * 7, dx = (i % 2 ? 1 : -1) * 3.2;
+      const w = W(dx, dz);
+      const C = new Grp(); C.position.set(dx, 0, dz); M.add(C);
+      for (let k = 0; k < 3; k++)
+        this.m(new DodGeo(.55 - k * .13, 0), k % 2 ? stone : dark, (hash2(i, k) - .5) * .3, .35 + k * .55,
+          (hash2(i, k + 4) - .5) * .3, { parent: C, recv: true });
+      const shard = this.m(new OctGeo(.24, 0),
+        new StdMat({ color: 0x7ce8e0, emissive: new Col(0x7ce8e0), emissiveIntensity: 1.4, roughness: .2, flatShading: true }),
+        0, 2.1, 0, { parent: C, cast: false });
+      shard.scale.y = 1.6;
+      const src = this.addLight(w.x, 2.1, w.z, 0x7ce8e0, 3.5, 12);
+      this.anims.push(t => {
+        shard.rotation.y = t * .6;
+        src.intensity = 3 + Math.sin(t * 1.6 + i) * 1;
+      });
+    }
+
+    /* The name only fades in once you are close: the mouth should be spotted,
+       not signposted from the plaza. */
+    const lbl = this.makeLabel(state.lang === "es" ? "Cuevas de Cristal" : "Crystal Caves", "#7ce8e0", 1.5);
+    const lw = W(0, -6);
+    lbl.position.set(lw.x, 5.4, lw.z);
     this.scene.add(lbl);
     this.nearLabels = this.nearLabels || [];
     this.nearLabels.push(lbl);
 
-    for (let i = 0; i < 7; i++) {
-      const a = ENTRY_DIR + Math.PI + (i - 3) * .42;
-      const r = 15 + hash2(i, 4) * 7;
-      const tx = CAVE_MOUTH.x + Math.sin(a) * r, tz = CAVE_MOUTH.z + Math.cos(a) * r;
-      if (Math.hypot(tx, tz) > 96) continue;
-      this.pine(tx, tz, .9 + hash2(i, 6) * .6);
+    /* pines on the flanks, framing the mouth without hiding the approach */
+    for (let i = 0; i < 6; i++) {
+      const side = i % 2 ? 1 : -1;
+      const dz = -4 + Math.floor(i / 2) * 6.5;
+      const w = W(side * (11 + hash2(i, 4) * 4), dz);
+      if (Math.hypot(w.x, w.z) > 92) continue;
+      this.pine(w.x, w.z, .9 + hash2(i, 6) * .5);
     }
   }
 
@@ -8118,7 +8639,10 @@ class Game {
       const a = pts[i], b = pts[i + 1];
       const mid = { x: (a.x + b.x) / 2, z: (a.z + b.z) / 2 };
       const len = Math.hypot(b.x - a.x, b.z - a.z) * 1.25;
-      const seg = this.m(new PlaneGeo(4.4, len), this.mat(0x0d3348, { roughness: .12, metalness: .5 }),
+      /* no env map in this build, so a shiny metal river renders as a hole in
+         the floor; a faint emissive is what makes it read as water */
+      const seg = this.m(new PlaneGeo(4.4, len),
+        new StdMat({ color: 0x1d5a76, emissive: new Col(0x0d3348), emissiveIntensity: .8, roughness: .25, metalness: .05 }),
         mid.x, .08, mid.z, { rx: -Math.PI / 2, cast: false, parent: H });
       seg.rotation.z = -Math.atan2(b.x - a.x, b.z - a.z);
     }
@@ -8143,7 +8667,7 @@ class Game {
       const s = .3 + Math.random() * .5;
       this.m(new CylGeo(.08 * s, .12 * s, s * 2, 5), this.mat(0xd8d2c4), Math.cos(a) * r, s, Math.sin(a) * r, { parent: H, cast: false });
       this.m(new SphGeo(s * .8, 8, 6, 0, 6.3, 0, Math.PI / 2),
-        new StdMat({ color: 0xffe6a0, emissive: new Col(0xb8922a), emissiveIntensity: .9, roughness: .6 }),
+        new StdMat({ color: 0xd8bd78, emissive: new Col(0x8a6c1e), emissiveIntensity: .5, roughness: .6 }),
         Math.cos(a) * r, s * 2, Math.sin(a) * r, { parent: H, cast: false });
     }
     this.crystalCluster(H, -n.r + 2, 0, -n.r + 3, 0xffd76a, 1);
@@ -8241,11 +8765,13 @@ class Game {
     f.near = 90 + (14 - 90) * k;
     f.far = 430 + (95 - 430) * k;
     this.sun.intensity = 2.5 * (1 - k);
-    this.hemi.intensity = 1 + (.5 - 1) * k;
+    this.hemi.intensity = 1 + (.72 - 1) * k;
     this.caveKey.visible = k > .05;
     this.caveFill.visible = k > .05;
-    this.caveKey.intensity = 1.5 * k;
-    this.caveFill.intensity = .6 * k;
+    this.caveVault.visible = k > .05;
+    this.caveKey.intensity = 2.2 * k;
+    this.caveFill.intensity = 1.15 * k;
+    this.caveVault.intensity = .55 * k;
     for (const l of this.outdoorLights) l.intensity = (l === this.outdoorLights[0] ? .8 : .3) * (1 - k);
     const outside = k < .96;
     for (const o of this.outdoorOnly) o.visible = outside;
@@ -8681,20 +9207,24 @@ class Game {
       const t = raySphere(pos.x, oy, pos.z, ux, uy, uz, o.x, o.y, o.z, o.r);
       if (t !== null && t < hit) hit = t;
     }
-    /* sample the ray against the ground and the tunnel envelope too */
-    for (let i = 2; i <= 8; i++) {
-      const t = hit * i / 8;
+    /* Sample the ray against the ground and the tunnel envelope too. The step
+       count sets how much distance a single blocked sample costs: at eight
+       steps one hit near the cat collapsed the camera onto its minimum, which
+       is why the caverns kept ending up filmed from inside the cat's ear. */
+    const STEPS = 16;
+    for (let i = 2; i <= STEPS; i++) {
+      const t = hit * i / STEPS;
       const sx = pos.x + ux * t, sy = oy + uy * t, sz = pos.z + uz * t;
       const blocked = state.inCave
-        ? !caveRoomy(sx, sz, 2.2) || sy < CAVE_Y + .4 || sy > CAVE_Y + caveHeadAt(sx, sz) - .8
+        ? !caveRoomy(sx, sz, 1.4) || sy < CAVE_Y + .4 || sy > CAVE_Y + caveHeadAt(sx, sz) - .8
         : sy < heightAt(sx, sz) + .5;
-      if (blocked) { hit = hit * (i - 1) / 8; break; }
+      if (blocked) { hit = hit * (i - 1) / STEPS; break; }
     }
     /* Snap in the instant something blocks the view, ease back out once it is
        clear. Smoothing both ways leaves the camera lagging behind an obstacle
        it has already decided to avoid, which is where most of the remaining
        blocked frames were coming from. */
-    const want = Math.max(2.7, hit - .5);
+    const want = Math.max(3.6, hit - .5);
     if (this.camDistSmooth == null || want < this.camDistSmooth) this.camDistSmooth = want;
     else this.camDistSmooth += (want - this.camDistSmooth) * Math.min(1, dt * 2.2);
     const camDist = this.camDistSmooth;
@@ -8762,7 +9292,7 @@ class Game {
        when you are nearly at it */
     for (const lb of (this.nearLabels || [])) {
       const d = lb.position.distanceTo(this.camera.position);
-      const a = state.inCave ? 0 : Math.min(1, Math.max(0, (34 - d) / 12)) * Math.min(1, Math.max(0, (d - 9) / 6));
+      const a = state.inCave ? 0 : Math.min(1, Math.max(0, (42 - d) / 14)) * Math.min(1, Math.max(0, (d - 7) / 5));
       lb.material.opacity = a;
       lb.visible = a > .02;
     }
