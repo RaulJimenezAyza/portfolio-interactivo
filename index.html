@@ -4225,7 +4225,7 @@ const I18N = {
     allZones: "🏛 ¡Has descubierto los 8 templos! Ahora ya sabes con quién hablas.",
     allFish: "🐟 ¡12/12! El gato ronronea. Logro desbloqueado: pescador de élite.",
     fishGet: "pez dorado",
-    doubleJump: "¡Doble salto!",
+    flipBack: "¡Mortal hacia atrás!", flipFront: "¡Mortal hacia delante!",
     aboutTitle: "Sobre mí",
     aboutP1: "Soy Raúl, ingeniero informático por la UAB (2026). Empecé estudiando diseño y desarrollo de videojuegos en la Universitat de Girona, y esa semilla gamedev sigue en todo lo que hago: mi TFG fue un simulador donde poblaciones de agentes evolucionan por su cuenta buscando comida.",
     aboutP2: "Hoy programo full stack en Service Next (Montmeló): web, APIs y producto real. Antes, un año largo de becario de TI en GCO, y por el camino construí TriniGlass, una app de gestión de almacén para una pyme que lo llevaba todo en papel. Unity y Unreal por gusto, TypeScript, Python y Node por oficio.",
@@ -4254,7 +4254,7 @@ const I18N = {
     allZones: "🏛 You found all 8 temples! Now you know who you're talking to.",
     allFish: "🐟 12/12! The cat purrs. Achievement unlocked: elite fisher.",
     fishGet: "golden fish",
-    doubleJump: "Double jump!",
+    flipBack: "Backflip!", flipFront: "Frontflip!",
     aboutTitle: "About",
     aboutP1: "I'm Raúl, Computer Engineering graduate from UAB (2026). I started out studying game design and development at Universitat de Girona, and that gamedev seed is in everything I do: my thesis was a simulator where populations of agents evolve on their own hunting for food.",
     aboutP2: "Today I write full stack code at Service Next (Montmeló): web, APIs and real product. Before that, a year-plus IT internship at GCO, and along the way I built TriniGlass, a warehouse management app for a small business that ran on paper. Unity and Unreal for fun, TypeScript, Python and Node for a living.",
@@ -7164,7 +7164,7 @@ class Game {
     this.heading = Math.PI;
     this.legPhase = 0; this.speedSmooth = 0;
     this.grounded = true; this.jumpsLeft = 2; this.jumpLatch = false;
-    this.flipT = 1; this.idleT = 0; this.sitF = 0;
+    this.flipT = 1; this.flipDir = -1; this.idleT = 0; this.sitF = 0;
     this.squash = 1; this.wasGrounded = true;
 
     const G = new Grp(); this.scene.add(G);
@@ -7386,7 +7386,14 @@ class Game {
         this.jumping = true;
         this.squash = 1.35;                      // stretch
         Snd.jump(isAir);
-        if (isAir) { this.flipT = 0; toast(TXT().doubleJump, 700); }
+        if (isAir) {
+          /* coin-flip the spin direction so the mid-air trick is not always
+             the same animation */
+          /* +1 tips the head down and forward, -1 throws it up and back */
+          this.flipDir = Math.random() < .5 ? 1 : -1;
+          this.flipT = 0;
+          toast(TXT()[this.flipDir > 0 ? "flipFront" : "flipBack"], 700);
+        }
         for (let i = 0; i < 2; i++) this.spawnDust(b.position.x, heightAt(b.position.x, b.position.z) + .15, b.position.z);
       }
     } else this.jumpLatch = false;
@@ -7475,7 +7482,7 @@ class Game {
     /* double-jump flip */
     if (this.flipT < 1) {
       this.flipT = Math.min(1, this.flipT + dt * 2.2);
-      this.catInner.rotation.x = -this.flipT * Math.PI * 2;
+      this.catInner.rotation.x = this.flipDir * this.flipT * Math.PI * 2;
     }
     /* tail wave (stronger curl when sitting) */
     for (let i = 0; i < this.tailSegs.length; i++) {
