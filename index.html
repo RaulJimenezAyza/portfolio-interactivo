@@ -5734,8 +5734,8 @@ function rampAt(x, z) {
   const t = segT(x, z, a, b);
   const px = a.x + (b.x - a.x) * t, pz = a.z + (b.z - a.z) * t;
   const d = Math.hypot(x - px, z - pz);
-  if (d > 7) return null;
-  return (a.y + (b.y - a.y) * t) * smoothstep(7, 3.6, d);
+  if (d > 13) return null;
+  return (a.y + (b.y - a.y) * t) * smoothstep(13, 7, d);
 }
 
 /* Height of the ground at any point. Always >= 0 on land, so the
@@ -5776,10 +5776,16 @@ const CAVE_MOUTH = { x: 34, z: 24 };
 
 /* chambers: r is the walkable radius, y the floor height */
 const CAVE_NODES = {
-  mouth: { x: 34, z: 24, y: 0, r: 5.5, head: 7 },
-  bend1: { x: 54, z: 32, y: -9, r: 6, head: 7 },
-  bend2: { x: 62, z: 8, y: -17, r: 6, head: 7 },
-  bend3: { x: 46, z: -12, y: -25, r: 6, head: 7 },
+  /* the descent heads south, clear of the Hill of Time's zone radius — the
+     old line ran the open ravine straight through it and the temple prompt
+     kept firing while the player was halfway underground */
+  /* Corridors are deliberately wide: a third-person camera needs room behind
+     the cat, and at the original 4-unit half-width every wall crystal ended up
+     between the lens and the player. */
+  mouth: { x: 34, z: 24, y: 0, r: 7, head: 11 },
+  bend1: { x: 40, z: 4, y: -9, r: 8, head: 12 },
+  bend2: { x: 52, z: -16, y: -17, r: 8, head: 12 },
+  bend3: { x: 34, z: -28, y: -25, r: 8, head: 12 },
   hub: { x: 12, z: 2, y: -30, r: 19, head: 17 },
   echo: { x: -42, z: 20, y: -30, r: 16, head: 14 },
   river: { x: 18, z: -44, y: -32, r: 17, head: 14 },
@@ -5787,8 +5793,8 @@ const CAVE_NODES = {
   crypt: { x: 52, z: -34, y: -35, r: 14, head: 13 }
 };
 const CAVE_EDGES = [
-  ["mouth", "bend1", 4.2], ["bend1", "bend2", 4.2], ["bend2", "bend3", 4.2], ["bend3", "hub", 4.6],
-  ["hub", "echo", 4.4], ["hub", "river", 4.4], ["hub", "runes", 4.4], ["hub", "crypt", 4.4]
+  ["mouth", "bend1", 6.5], ["bend1", "bend2", 6.5], ["bend2", "bend3", 6.5], ["bend3", "hub", 6.8],
+  ["hub", "echo", 6.5], ["hub", "river", 6.5], ["hub", "runes", 6.5], ["hub", "crypt", 6.5]
 ];
 
 /* closest point on a segment, as a 0..1 parameter */
@@ -6231,7 +6237,11 @@ class Game {
     }
 
     /* ---- sea ---- */
-    const water = this.m(new CircleGeo(900, 96),
+    /* A ring, not a disc: a full disc at y=-0.85 spans the whole island, so
+       anything below sea level inland — the entrance ravine, the caverns —
+       ends up hidden behind a sheet of water. The inner edge sits well inside
+       the narrowest point of the coast, where there is always land above it. */
+    const water = this.m(new RingGeo(66, 900, 96, 1),
       this.mat(0x17405f, { roughness: .34, metalness: .18 }), 0, -.85, 0,
       { rx: -Math.PI / 2, cast: false, recv: true });
     this.water = water;
@@ -7682,7 +7692,7 @@ class Game {
     const spots = [
       [8, -22, 1.1],            /* south of the letters */
       [-20, 12, 1.3],           /* pond centre */
-      [26, 24, 1.1],            /* NE meadow */
+      [14, 46, 1.1],            /* NE meadow, clear of the ravine */
       [-42, 42, 1.2],           /* behind the cat house */
       [64, -14, 1.1],           /* behind the lab */
       [30, -56, 1.2],           /* warehouse side */
@@ -7716,6 +7726,7 @@ class Game {
   }
 
 
+
   /* ============ the caverns ============ */
   buildCave() {
     const G = new Grp(); this.scene.add(G);
@@ -7724,8 +7735,27 @@ class Game {
     this.rock = this.mat(0x5c5468, { roughness: 1, flatShading: true });
     this.rockDark = this.mat(0x3d3549, { roughness: 1, flatShading: true });
 
-    for (const [ka, kb, w] of CAVE_EDGES) this.tunnel(G, CAVE_NODES[ka], CAVE_NODES[kb], w);
-    for (const k in CAVE_NODES) if (CAVE_NODES[k].r > 8) this.chamberShell(G, CAVE_NODES[k]);
+    /* The first leg is the open ravine, already cut into the island heightmap.
+       Building a tunnel tube over it put a roof of rock above the entrance —
+       which is why the way in was pitch black and the camera sat inside stone. */
+    for (const [ka, kb, w] of CAVE_EDGES) {
+      if (ka === "mouth" || kb === "mouth") continue;
+      this.tunnel(G, CAVE_NODES[ka], CAVE_NODES[kb], w);
+    }
+    /* elbows: a rock bubble at every junction, otherwise two straight tubes
+       meeting at an angle leave a wedge of open sky between them */
+    for (const k in CAVE_NODES) {
+      const n = CAVE_NODES[k];
+      if (n.r > 8) this.chamberShell(G, n);
+      /* the mouth is open sky at the top of the ravine — a rock bubble there
+         would swallow the camera on the way in */
+      else if (k !== "mouth") this.elbow(G, n);
+    }
+    for (const [ka, kb, w] of CAVE_EDGES) {
+      const a = CAVE_NODES[ka], b = CAVE_NODES[kb];
+      if (a.r > 8) this.tunnelArch(G, a, b, w);
+      if (b.r > 8) this.tunnelArch(G, b, a, w);
+    }
 
     this.buildMouth();
     this.buildHub();
@@ -7734,7 +7764,6 @@ class Game {
     this.buildRuneHall();
     this.buildCryptHall();
 
-    /* rings under every interactive altar */
     for (const sp of this.caveSpots) {
       const ring = this.m(new RingGeo(sp.r - 1.3, sp.r - .6, 40),
         this.bmat(new Col(sp.meta.color).getHex(), { transparent: true, opacity: .4, side: SIDE_DOUBLE }),
@@ -7746,37 +7775,85 @@ class Game {
   }
 
   /* A corridor is an open-ended cylinder seen from the inside with a flat
-     walkway laid along its bottom. Using a full tube rather than a half
-     barrel avoids having to reason about which way the vault faces once the
-     segment is tilted. */
+     walkway along its bottom, lit by crystal veins so it is actually
+     navigable — the first version was pitch black end to end. */
   tunnel(parent, a, b, w) {
     const dx = b.x - a.x, dz = b.z - a.z, dy = b.y - a.y;
     const flat = Math.hypot(dx, dz);
     const run = Math.hypot(flat, dy);
+    const ang = Math.atan2(dx, dz);
 
     const grp = new Grp();
     grp.position.set((a.x + b.x) / 2, (a.y + b.y) / 2 + w * .55, (a.z + b.z) / 2);
-    grp.rotation.y = Math.atan2(dx, dz);
-    grp.rotation.x = -Math.atan2(dy, flat);      /* tilt down the slope */
+    grp.rotation.y = ang;
+    grp.rotation.x = -Math.atan2(dy, flat);
     parent.add(grp);
 
-    const tube = new Mesh(new CylGeo(w * 1.45, w * 1.45, run + 2, 16, 1, true),
+    const tube = new Mesh(new CylGeo(w * 1.45, w * 1.45, run + 3, 16, 1, true),
       new StdMat({ color: 0x453d52, roughness: 1, flatShading: true, side: SIDE_BACK }));
     tube.rotation.x = Math.PI / 2;
     grp.add(tube);
-
-    const floor = this.m(new PlaneGeo(w * 2, run + 2), this.rock, 0, -w * .55, 0,
+    this.m(new PlaneGeo(w * 2, run + 3), this.rock, 0, -w * .55, 0,
       { rx: -Math.PI / 2, cast: false, recv: true, parent: grp });
 
-    const n = Math.max(1, Math.round(run / 11));
-    for (let i = 0; i < n; i++) {
-      const t = (i + .5) / n, side = i % 2 ? 1 : -1;
-      this.m(new DodGeo(.7 + hash2(i, Math.round(a.x)) * .9, 0), this.rockDark,
+    /* Glowing veins every few metres, pinned to the walls. Anything nearer
+       the centre line ends up between the camera and the cat. The open-air
+       entrance ramp is skipped — it already has daylight. */
+    const lights = a.y < -8 || b.y < -8 ? Math.max(1, Math.round(run / 13)) : 0;
+    for (let i = 0; i < lights; i++) {
+      const t = (i + .5) / lights;
+      const side = i % 2 ? 1 : -1;
+      const lx = a.x + dx * t + Math.cos(ang) * side * (w * 1.18);
+      const lz = a.z + dz * t - Math.sin(ang) * side * (w * 1.18);
+      const ly = a.y + dy * t + 3.1;
+      const col = [0x7ce8e0, 0x8fb0ff, 0x9fe8d0][i % 3];
+      for (let k = 0; k < 2; k++) {
+        const c = this.m(new OctGeo(.22 + hash2(i, k) * .18, 0),
+          new StdMat({ color: col, emissive: new Col(col), emissiveIntensity: 1.3, roughness: .2, flatShading: true }),
+          lx + (hash2(i, k + 4) - .5) * .5, ly + k * .6, lz + (hash2(i, k + 9) - .5) * .5, { parent, cast: false });
+        c.scale.y = 1.2 + hash2(i, k) * .8;
+      }
+      parent.add(this.glowSprite(col, 1.7, new V3(lx, ly, lz)));
+      const src = this.addLight(lx, ly, lz, col, 5.5, 20);
+      this.anims.push(t2 => { src.intensity = 5 + Math.sin(t2 * 1.4 + i) * 1.2; });
+    }
+
+    const nb = Math.max(1, Math.round(run / 12));
+    for (let i = 0; i < nb; i++) {
+      const t = (i + .5) / nb, side = i % 2 ? -1 : 1;
+      this.m(new DodGeo(.6 + hash2(i, Math.round(a.x)) * .8, 0), this.rockDark,
         side * (w - .5), -w * .45, (t - .5) * run, { parent: grp, cast: false, ry: hash2(i, 3) * 6 });
     }
   }
 
-  /* chamber shell: floor disc, wall cylinder and a low dome */
+  /* rock bubble covering a junction between two tunnels */
+  elbow(parent, n) {
+    const s = new Mesh(new SphGeo(n.r * 1.5, 18, 12),
+      new StdMat({ color: 0x453d52, roughness: 1, flatShading: true, side: SIDE_BACK }));
+    s.position.set(n.x, n.y + n.r * .5, n.z);
+    parent.add(s);
+    this.m(new CircleGeo(n.r + 1.5, 20), this.rock, n.x, n.y + .02, n.z,
+      { rx: -Math.PI / 2, cast: false, recv: true, parent });
+  }
+
+  /* a carved arch where a corridor opens into a chamber, so the two shells
+     meet at something deliberate instead of an abrupt intersection */
+  tunnelArch(parent, chamber, other, w) {
+    const ang = Math.atan2(other.x - chamber.x, other.z - chamber.z);
+    const r = chamber.r + 1.4;
+    const A = new Grp();
+    A.position.set(chamber.x + Math.sin(ang) * r, chamber.y, chamber.z + Math.cos(ang) * r);
+    A.rotation.y = ang;
+    parent.add(A);
+    const jamb = this.mat(0x4a4256, { roughness: 1, flatShading: true });
+    this.m(new BoxGeo(1.8, w * 2.4, 3), jamb, -(w * 1.5), w * 1.2, 0, { parent: A, recv: true });
+    this.m(new BoxGeo(1.8, w * 2.4, 3), jamb, w * 1.5, w * 1.2, 0, { parent: A, recv: true });
+    this.m(new BoxGeo(w * 3.8, 1.4, 3), jamb, 0, w * 2.4, 0, { parent: A });
+    const col = 0x7ce8e0;
+    A.add(this.glowSprite(col, 1.8, new V3(0, w * 2.4, 1.2)));
+    this.addLight(A.position.x, chamber.y + w * 2.2, A.position.z, col, 4.5, 16);
+  }
+
   chamberShell(parent, n) {
     const g = new Grp(); g.position.set(n.x, n.y, n.z); parent.add(g);
     const fgeo = new CircleGeo(n.r + 2, 44);
@@ -7796,16 +7873,16 @@ class Game {
       new StdMat({ color: 0x352e42, roughness: 1, flatShading: true, side: SIDE_BACK }));
     dome.position.y = n.head + 5; dome.scale.y = .45; g.add(dome);
 
-    /* stalagmites hugging the walls */
-    for (let i = 0; i < 14; i++) {
-      const a = hash2(i, Math.round(n.x)) * 6.28, r = n.r * (.55 + hash2(i, 9) * .4);
-      const h = 1.6 + hash2(i, 21) * 4;
-      this.m(new ConeGeo(.45 + hash2(i, 5) * .8, h, 6), i % 3 ? this.rock : this.rockDark,
+    /* keep spires off the walls so they stop poking through the shell */
+    for (let i = 0; i < 12; i++) {
+      const a = hash2(i, Math.round(n.x)) * 6.28, r = n.r * (.45 + hash2(i, 9) * .32);
+      const h = 1.6 + hash2(i, 21) * 3.4;
+      this.m(new ConeGeo(.45 + hash2(i, 5) * .7, h, 6), i % 3 ? this.rock : this.rockDark,
         Math.cos(a) * r, h / 2 - .3, Math.sin(a) * r, { parent: g, recv: true });
       if (i % 2) {
-        const h2 = 1.4 + hash2(i, 33) * 3.5;
-        this.m(new ConeGeo(.4 + hash2(i, 7) * .6, h2, 6), this.rockDark,
-          Math.cos(a + .4) * r * .8, n.head - h2 / 2 + 2, Math.sin(a + .4) * r * .8,
+        const h2 = 1.4 + hash2(i, 33) * 3;
+        this.m(new ConeGeo(.4 + hash2(i, 7) * .5, h2, 6), this.rockDark,
+          Math.cos(a + .5) * r * .75, n.head - h2 / 2 + 1, Math.sin(a + .5) * r * .75,
           { parent: g, rx: Math.PI, cast: false });
       }
     }
@@ -7820,7 +7897,7 @@ class Game {
         (Math.random() - .5) * 2 * scale, sh * .5, (Math.random() - .5) * 2 * scale, { parent: cl, cast: false });
       c.scale.y = sh;
     }
-    parent.add(this.glowSprite(col, 5 * scale, new V3(x, y + 1.5, z)));
+    parent.add(this.glowSprite(col, 2.2 * scale, new V3(x, y + 1.5, z)));
     return this.addLight(x, y + 2, z, col, 7 * scale, 24 * scale);
   }
 
@@ -7838,7 +7915,7 @@ class Game {
       orb.rotation.y = t * .8; orb.rotation.x = t * .3;
       orb.position.y = 3.3 + Math.sin(t * 1.4) * .22;
     });
-    A.add(this.glowSprite(col, 6, new V3(0, 3.3, 0)));
+    A.add(this.glowSprite(col, 3, new V3(0, 3.3, 0)));
     this.addLight(node.x, node.y + 3.4, node.z, col, 9, 26);
     const lbl = this.makeLabel(L(opts.label), "#" + new Col(col).getHexString(), 1.3);
     lbl.position.set(0, 5.6, 0); A.add(lbl);
@@ -7852,35 +7929,77 @@ class Game {
     return A;
   }
 
-  /* ---- the mouth on the surface ---- */
-  buildMouth() {
-    const n = CAVE_NODES.mouth;
-    const M = new Grp();
-    M.position.set(CAVE_MOUTH.x, 0, CAVE_MOUTH.z);
-    M.rotation.y = Math.atan2(-CAVE_MOUTH.x, -CAVE_MOUTH.z);
-    this.scene.add(M);
-    const mound = this.mat(0x4a4457, { roughness: 1, flatShading: true });
-    const dark = this.mat(0x352f42, { roughness: 1, flatShading: true });
-    [[0, 2.2, -7, 6.4], [-6.4, 1.6, -3.4, 4.4], [6.4, 1.6, -3.4, 4.4],
-     [0, 6, -6, 4.2], [-4, 4.4, -8, 3.6], [4, 4.4, -8, 3.6],
-     [-5.4, .8, 1.6, 3], [5.4, .8, 1.6, 3]].forEach(([dx, dy, dz, r], i) => {
-      const b = this.m(new IcoGeo(r, 0), i % 3 ? mound : dark, dx, dy, dz, { parent: M, recv: true });
-      b.rotation.set(hash2(i, 1) * 3, hash2(i, 2) * 6, hash2(i, 3) * 3);
-    });
-    /* lintel and jambs frame a real opening you walk through */
-    this.m(new BoxGeo(9, 1.2, 2), dark, 0, 5.6, 0, { parent: M });
-    this.m(new BoxGeo(2, 5.6, 2), mound, -4.3, 2.8, 0, { parent: M });
-    this.m(new BoxGeo(2, 5.6, 2), mound, 4.3, 2.8, 0, { parent: M });
-    M.add(this.glowSprite(0x7ce8e0, 2.6, new V3(0, 1, 1.8)));
-    this.addLight(CAVE_MOUTH.x, 2.4, CAVE_MOUTH.z, 0x7ce8e0, 7, 20);
 
+  /* ---- the entrance ----
+     A ravine cut into the island that walks you down to a stone portal set
+     into the rock face. The previous version piled boulders on top of the
+     trench, which hid the only thing that explained where you were going. */
+  buildMouth() {
+    const a = CAVE_NODES.mouth, b = CAVE_NODES.bend1;
+    const ang = Math.atan2(b.x - a.x, b.z - a.z);          // heading of the descent
+    const nx = Math.cos(ang), nz = -Math.sin(ang);         // sideways unit vector
+    const stone = this.mat(0x59516a, { roughness: 1, flatShading: true });
+    const stoneDark = this.mat(0x42394f, { roughness: 1, flatShading: true });
+
+    /* boulders lining both lips of the ravine, sunk to the local ground so
+       they read as exposed bedrock rather than props dropped on the grass */
+    for (let i = 2; i <= 9; i++) {
+      const t = i / 9;
+      const cx = a.x + (b.x - a.x) * t, cz = a.z + (b.z - a.z) * t;
+      for (const side of [-1, 1]) {
+        for (let k = 0; k < 2; k++) {
+          const off = 15 + k * 5 + hash2(i, k) * 2.5;
+          const px = cx + nx * side * off, pz = cz + nz * side * off;
+          const r = 1.5 + hash2(i, k + 3) * 1.7;
+          const rock = this.m(new IcoGeo(r, 0), (i + k) % 3 ? stone : stoneDark,
+            px, heightAt(px, pz) + r * .3, pz, { recv: true });
+          rock.rotation.set(hash2(i, k) * 3, hash2(i, k + 7) * 6, hash2(i, k + 11) * 3);
+        }
+      }
+    }
+
+    /* the portal itself, at the bottom of the ravine where rock closes over */
+    const P = new Grp();
+    P.position.set(b.x, b.y, b.z);
+    P.rotation.y = ang;
+    this.scene.add(P);
+    const W = 4.2;
+    this.m(new BoxGeo(2.4, 9, 3.4), stone, -(W * 1.6), 4.5, 0, { parent: P, recv: true });
+    this.m(new BoxGeo(2.4, 9, 3.4), stone, W * 1.6, 4.5, 0, { parent: P, recv: true });
+    this.m(new BoxGeo(W * 4.4, 1.8, 3.4), stone, 0, 9.6, 0, { parent: P });
+    /* the cliff the doorway is cut into: a wall of rock above and around it */
+    for (let i = 0; i < 7; i++) {
+      const r = 3.4 + hash2(i, 5) * 3;
+      const rock = this.m(new IcoGeo(r, 0), i % 2 ? stone : stoneDark,
+        (hash2(i, 1) - .5) * 22, 9 + hash2(i, 2) * 7, -3 - hash2(i, 3) * 4, { parent: P, recv: true });
+      rock.rotation.set(hash2(i, 4) * 3, hash2(i, 6) * 6, hash2(i, 8) * 3);
+    }
+    /* a black plane inside the opening so it reads as depth, not a gap */
+    this.m(new PlaneGeo(W * 3, 9), this.bmat(0x04040a), 0, 4.5, -1.4, { parent: P, cast: false });
+
+    /* cyan light spilling out of the doorway, and veins climbing the jambs */
+    P.add(this.glowSprite(0x7ce8e0, 3, new V3(0, 3, 1.2)));
+    this.addLight(b.x, b.y + 3, b.z, 0x7ce8e0, 9, 26);
+    for (const side of [-1, 1])
+      for (let k = 0; k < 3; k++) {
+        const c = this.m(new OctGeo(.34, 0),
+          new StdMat({ color: 0x7ce8e0, emissive: new Col(0x7ce8e0), emissiveIntensity: 1.2, roughness: .2, flatShading: true }),
+          side * (W * 1.9), 1.4 + k * 2.4, 2.4, { parent: P, cast: false });
+        c.scale.y = 1.3;
+      }
+
+    /* signage up at ground level, where you first see the ravine */
     const lbl = this.makeLabel(state.lang === "es" ? "Cuevas de Cristal" : "Crystal Caves", "#7ce8e0", 2.2);
-    lbl.position.set(CAVE_MOUTH.x, 10, CAVE_MOUTH.z);
+    lbl.position.set(a.x, 8.5, a.z);
     this.scene.add(lbl);
     this.labels.push(lbl);
-    const sp = 6.5;
-    this.sign(CAVE_MOUTH.x + Math.cos(M.rotation.y) * sp, CAVE_MOUTH.z - Math.sin(M.rotation.y) * sp,
-      M.rotation.y + Math.PI, state.lang === "es" ? "Cuevas de Cristal" : "Crystal Caves", "#7ce8e0");
+    this.sign(a.x - nx * 7, a.z - nz * 7, ang + Math.PI / 2,
+      state.lang === "es" ? "Cuevas de Cristal" : "Crystal Caves", "#7ce8e0");
+    const arrow = this.m(new ConeGeo(.8, 1.6, 4),
+      new StdMat({ color: 0x7ce8e0, emissive: new Col(0x7ce8e0), emissiveIntensity: 1, roughness: .3 }),
+      a.x + Math.sin(ang) * 3, 1.4, a.z + Math.cos(ang) * 3, { cast: false });
+    arrow.rotation.x = Math.PI;
+    this.anims.push(t => { arrow.position.y = 1.4 + Math.sin(t * 2) * .3; });
   }
 
   /* ---- 0 · the crossroads ---- */
@@ -7893,12 +8012,15 @@ class Game {
     this.m(new RingGeo(6.4, 7, 36), this.bmat(0x7ce8e0, { transparent: true, opacity: .3, side: SIDE_DOUBLE }),
       0, .1, 0, { rx: -Math.PI / 2, cast: false, parent: H });
     /* a great crystal column holding the ceiling up */
+    /* The pillar used to stand dead centre, exactly where every corridor
+       arrives — the camera spent the whole crossing inside it. It now hangs
+       from the ceiling instead, leaving the floor of the junction clear. */
     const colM = new StdMat({ color: 0x9fd8ff, emissive: new Col(0x3a7fa8), emissiveIntensity: .8, roughness: .25, flatShading: true });
-    const shaft = this.m(new CylGeo(1.6, 2.6, n.head + 4, 7), colM, 0, (n.head + 4) / 2, 0, { parent: H });
+    const shaft = this.m(new ConeGeo(3.2, n.head * .55, 7), colM, 0, n.head - n.head * .275 + 2, 0,
+      { parent: H, rx: Math.PI, cast: false });
     this.anims.push(t => { shaft.material.emissiveIntensity = .7 + Math.sin(t * .9) * .25; });
-    this.scyl(2.6, n.head, n.x, n.y + n.head / 2, n.z);
-    this.addLight(n.x, n.y + 7, n.z, 0x9fd8ff, 14, 46);
-    H.add(this.glowSprite(0x9fd8ff, 14, new V3(0, 7, 0)));
+    this.addLight(n.x, n.y + n.head * .6, n.z, 0x9fd8ff, 15, 50);
+    H.add(this.glowSprite(0x9fd8ff, 5, new V3(0, n.head * .55, 0)));
     for (let i = 0; i < 5; i++)
       this.crystalCluster(H, Math.cos(i * 1.26 + .3) * (n.r - 3), 0, Math.sin(i * 1.26 + .3) * (n.r - 3),
         [0x7ce8e0, 0x8fb0ff, 0xf2a2c4, 0xffd76a, 0x7fdca8][i], .9);
@@ -8527,7 +8649,21 @@ class Game {
     const camA = this.heading + this.camYaw;
     const cs = Math.sin(camA), cc = Math.cos(camA);
     /* corridors are narrow, so pull the camera in and lower it down there */
-    const camDist = state.inCave ? 7.5 : 12, camHigh = state.inCave ? 3.4 : 6.5;
+    /* Tunnels and the ravine are narrow enough that a fixed chase distance
+       buries the camera in rock. Pull it in until it fits: underground it has
+       to be inside the network, above ground it has to clear the terrain. */
+    const tight = state.inCave || (this._depthK ?? 0) > .06;
+    const camHigh = tight ? 4.6 : 6.5;
+    let camDist = tight ? 7.5 : 12;
+    if (tight) {
+      for (let i = 0; i < 7; i++) {
+        const cx = pos.x - cs * camDist, cz = pos.z - cc * camDist;
+        const inTunnel = caveFloorAt(cx, cz) !== null;
+        const clearsGround = heightAt(cx, cz) < pos.y + camHigh - 1.2;
+        if (state.inCave ? inTunnel : (inTunnel || clearsGround)) break;
+        camDist *= .74;
+      }
+    }
     this.camGoal.set(pos.x - cs * camDist, pos.y + camHigh, pos.z - cc * camDist);
     this.camera.position.lerp(this.camGoal, Math.min(1, dt * 4));
     /* never let the follow camera sink into a hillside */
