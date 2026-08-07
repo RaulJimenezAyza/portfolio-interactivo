@@ -15,8 +15,10 @@ peces dorados escondidos y un minijuego de Mastermind.
 - Audio sintetizado en tiempo real: música generativa con una paleta distinta
   por templo, ambiente de mar y viento, y efectos por oscilador. Sin archivos.
 - Minijuego de Mastermind en las Ruinas del Enigma que desbloquea el altar.
-- Cueva de cristal bajo la isla con un arcade de cuatro máquinas: Pong, un
-  Snake temático, un Simon de runas y el propio Mastermind, con récords guardados.
+- Cuevas de cristal bajo la isla, a las que se baja andando por una rampa
+  tallada en el propio terreno: una red de túneles conecta cinco cámaras
+  temáticas — la Sala de Ecos (Pong), el Río de los Peces (Snake), el Círculo
+  de Runas (Simon) y la Cripta del Código (Mastermind), con récords guardados.
 - Español e inglés, controles de teclado y táctiles.
 
 ## Controles
