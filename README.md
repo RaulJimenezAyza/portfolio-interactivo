@@ -4,7 +4,7 @@ Portfolio de **Raúl Jiménez Ayza** (gameplay & fullstack dev) como juego 3D:
 una isla con relieve, ocho templos que cuentan su CV, físicas reales, doce
 peces dorados escondidos y un minijuego de Mastermind.
 
-▶ **[Jugar](https://RaulJimenezAyza.github.io/isla-del-gato/)**
+▶ **[Jugar](https://rauljimenezayza.github.io/curriculum/)**
 
 ## Qué hay dentro
 
