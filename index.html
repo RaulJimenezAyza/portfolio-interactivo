@@ -41,7 +41,11 @@
   /* controls legend */
   #legend{position:fixed;left:50%;bottom:18px;transform:translateX(-50%);z-index:20;display:flex;gap:16px;align-items:center;
     padding:10px 16px;border:1px solid var(--line2);background:#0b0b0ecc;backdrop-filter:blur(8px);border-radius:6px;
-    font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--mut);pointer-events:none;flex-wrap:wrap;justify-content:center;max-width:calc(100vw - 24px)}
+    font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--mut);pointer-events:none;flex-wrap:wrap;justify-content:center;max-width:calc(100vw - 24px);
+    transition:opacity .45s ease,transform .45s ease}
+  /* the cheat sheet steps aside once you have read it; the ? button brings it back */
+  #legend.hide{opacity:0;transform:translateX(-50%) translateY(14px)}
+  .hbtn.on{border-color:var(--green);color:var(--green)}
   #legend .grp{display:flex;align-items:center;gap:7px}
   #legend .key{display:inline-grid;place-items:center;min-width:22px;height:22px;padding:0 5px;border:1px solid var(--line2);
     border-radius:3px;background:#101014;color:var(--ink);font-size:10px}
@@ -217,6 +221,7 @@
       <div class="role" data-i18n="role"></div>
     </div>
     <div class="hud-right">
+      <button class="hbtn" id="helpBtn">?</button>
       <button class="hbtn" id="audioBtn" title="audio">♪</button>
       <button class="hbtn" id="langBtn">EN</button>
       <button class="hbtn" id="infoBtn" data-i18n="infoBtn"></button>
@@ -4203,6 +4208,7 @@ const I18N = {
     role: "full stack & gameplay dev", infoBtn: "CV / Info", kmh: "vel",
     legDrive: "mover", legBoost: "correr", legBrake: "saltar", legOpen: "abrir",
     legHonk: "maullar", legReset: "reset", legPlay: "jugar",
+    helpTip: "Ver los controles",
     promptK: "lugar sagrado", promptO: "pulsa E o clic para entrar",
     introKick: "La Isla del Gato · portfolio jugable",
     introTitle: "Hago que las cosas se muevan.",
@@ -4231,6 +4237,7 @@ const I18N = {
     role: "full stack & gameplay dev", infoBtn: "CV / Info", kmh: "spd",
     legDrive: "move", legBoost: "run", legBrake: "jump", legOpen: "open",
     legHonk: "meow", legReset: "reset", legPlay: "play",
+    helpTip: "Show the controls",
     promptK: "sacred place", promptO: "press E or click to enter",
     introKick: "Cat Island · playable portfolio",
     introTitle: "I make things move.",
@@ -4374,6 +4381,7 @@ function applyLang() {
   $("#langBtn").textContent = state.lang === "es" ? "EN" : "ES";
   $("#infoClose").textContent = t.close;
   $("#mClose").textContent = t.close;
+  $("#helpBtn").title = t.helpTip;
   updateHud();
   if (state.minigame) {
     $("#mmKicker").textContent = MT().kicker;
@@ -4389,6 +4397,21 @@ function applyLang() {
 $("#langBtn").addEventListener("click", () => {
   state.lang = state.lang === "es" ? "en" : "es";
   applyLang();
+});
+
+/* The control legend is only useful for the first few seconds. It slides away
+   on its own and the ? button in the HUD brings it back for good — once the
+   player asks for it explicitly, it stays until they dismiss it. */
+let legendTimer = null;
+function showLegend(v, autoHideMs = 0) {
+  $("#legend").classList.toggle("hide", !v);
+  $("#helpBtn").classList.toggle("on", v);
+  clearTimeout(legendTimer);
+  if (v && autoHideMs) legendTimer = setTimeout(() => showLegend(false), autoHideMs);
+}
+$("#helpBtn").addEventListener("click", () => {
+  showLegend($("#legend").classList.contains("hide"));
+  Snd.ui(true);
 });
 
 function updateHud() {
@@ -7588,6 +7611,7 @@ function startGame() {
   started = true;
   $("#intro").classList.add("hide");
   Snd.begin();
+  showLegend(true, 9000);
 }
 $("#startBtn").addEventListener("click", startGame);
 addEventListener("keydown", () => {
