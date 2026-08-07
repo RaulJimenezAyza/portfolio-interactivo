@@ -4256,7 +4256,7 @@ const I18N = {
     promptK: "lugar sagrado", promptO: "pulsa E o clic para entrar",
     introKick: "La Isla del Gato · portfolio jugable",
     introTitle: "Hago que las cosas se muevan.",
-    introBody: "Una isla, ocho templos y un gato con curriculum. Explora, salta, tira cajas, sube a la colina del tiempo, roba los peces dorados, baja a la cueva de cristal a jugar y entra en cada templo para descubrir quién es Raúl.",
+    introBody: "Una isla, siete templos y un gato con curriculum. Explora, salta, tira cajas, sube a la colina del tiempo, roba los peces dorados, baja a la cueva de cristal a jugar y entra en cada templo para descubrir quién es Raúl.",
     miniDrive: "WASD / flechas para mover al gato",
     miniOpen: "E dentro de un templo", miniFish: "🐟 12 peces escondidos",
     miniHonk: "🕹 4 minijuegos en la cueva",
@@ -4266,7 +4266,7 @@ const I18N = {
     err: "No se pudo iniciar el 3D. Este archivo lleva el motor dentro, solo necesita un navegador con WebGL. Prueba con Chrome/Edge actualizado.",
     zonesHud: "templos", fishHud: "peces",
     discover: "Templo descubierto:",
-    allZones: "🏛 ¡Has descubierto los 8 templos! Ahora ya sabes con quién hablas.",
+    allZones: "🏛 ¡Has descubierto los 7 templos! Ahora ya sabes con quién hablas.",
     allFish: "🐟 ¡12/12! El gato ronronea. Logro desbloqueado: pescador de élite.",
     fishGet: "pez dorado",
     flipBack: "¡Mortal hacia atrás!", flipFront: "¡Mortal hacia delante!",
@@ -4285,7 +4285,7 @@ const I18N = {
     promptK: "sacred place", promptO: "press E or click to enter",
     introKick: "Cat Island · playable portfolio",
     introTitle: "I make things move.",
-    introBody: "One island, eight temples and a cat with a résumé. Explore, jump, knock crates over, climb the hill of time, steal the golden fish, drop into the crystal cave for a game and enter each temple to find out who Raúl is.",
+    introBody: "One island, seven temples and a cat with a résumé. Explore, jump, knock crates over, climb the hill of time, steal the golden fish, drop into the crystal cave for a game and enter each temple to find out who Raúl is.",
     miniDrive: "WASD / arrows to move the cat",
     miniOpen: "E inside a temple", miniFish: "🐟 12 hidden fish",
     miniHonk: "🕹 4 minigames in the cave",
@@ -4295,7 +4295,7 @@ const I18N = {
     err: "Could not start 3D. The engine is embedded in this file, it only needs a WebGL browser. Try an up-to-date Chrome/Edge.",
     zonesHud: "temples", fishHud: "fish",
     discover: "Temple discovered:",
-    allZones: "🏛 You found all 8 temples! Now you know who you're talking to.",
+    allZones: "🏛 You found all 7 temples! Now you know who you're talking to.",
     allFish: "🐟 12/12! The cat purrs. Achievement unlocked: elite fisher.",
     fishGet: "golden fish",
     flipBack: "Backflip!", flipFront: "Frontflip!",
@@ -4383,10 +4383,10 @@ const ZONES_META = [
   { key: "triniglass", kind: "project", idx: 1, color: AMBER,
     name: { es: "El Gran Almacén", en: "The Great Warehouse" },
     lore: { es: "Aquí murió el papel y nació el inventario digital. Las cajas se pueden empujar. Tú puedes.", en: "Paper died here and digital inventory was born. The crates can be pushed. Go on." } },
-  { key: "mastermind", kind: "project", idx: 2, color: PINK,
-    name: { es: "Ruinas del Enigma", en: "Ruins of the Riddle" },
-    lore: { es: "Cuatro orbes guardan un código secreto desde tiempos ancestrales. Nadie lo ha roto aún.", en: "Four orbs have kept a secret code since ancient times. Nobody has cracked it yet." },
-    loreDone: { es: "Los orbes se han detenido: el código que guardaban lleva tu nombre.", en: "The orbs have stopped: the code they guarded now carries your name." } },
+  /* The Ruins of the Riddle used to stand here, running the same Mastermind
+     the Crypt of the Code runs underground. The project itself is still in
+     the CV panel; the temple that duplicated a cave hall is gone, and its
+     road out of the plaza now leads to the bridge. */
   { key: "gamedev", kind: "project", idx: 3, color: CYAN,
     name: { es: "Santuario Arcade", en: "Arcade Sanctuary" },
     lore: { es: "La máquina lleva décadas jugando sola al pong. Los bumpers son inofensivos. Casi.", en: "The machine has been playing pong against itself for decades. The bumpers are harmless. Mostly." } },
@@ -4461,7 +4461,7 @@ $("#helpBtn").addEventListener("click", () => {
 function updateHud() {
   const t = TXT();
   $("#fishHud").innerHTML = `🐟 <b>${state.fish}</b>/${state.fishTotal} <span>${t.fishHud}</span>`;
-  $("#zoneHud").innerHTML = `🏛 <b>${state.zonesFound}</b>/8 <span>${t.zonesHud}</span>`;
+  $("#zoneHud").innerHTML = `🏛 <b>${state.zonesFound}</b>/${ZONES_META.length} <span>${t.zonesHud}</span>`;
 }
 
 /* ---------- project modal ---------- */
@@ -5183,8 +5183,10 @@ function mmCheckGuess() {
     Snd.fanfare();
     if (game) {
       game.lockRuneOrbs(MM.code.map(i => MM_COLORS[i].int));
-      const p = ZONE_POS[3];
-      game.confetti(p.x, 5, p.z, 70);
+      /* the riddle is only in the cave now, so celebrate wherever the cat is
+         standing rather than at a temple that no longer exists */
+      const p = game.catBody.position;
+      game.confetti(p.x, p.y + 2, p.z, 70);
     }
     toast(MT().winT, 3200);
   } else if (MM.guesses.length >= MM_TRIES) {
@@ -5629,16 +5631,19 @@ addEventListener("keyup", e => {
    ============================================================ */
 let game = null;
 
-/* temple positions on the island (index-aligned with ZONES_META) */
+/* Temple positions on the island (index-aligned with ZONES_META).
+   The Ruins of the Riddle used to stand at (-56,-26) running the same
+   Mastermind the Crypt of the Code runs underground, so the island had a
+   temple that duplicated a cave hall. Its road now carries on past the old
+   site and out to the bridge instead. */
 const ZONE_POS = [
   { x: -42, z: 34, r: 9 },     // 0 casa del gato
   { x: 56, z: -2, r: 11 },     // 1 templo de la evolución
   { x: 38, z: -48, r: 11 },    // 2 gran almacén
-  { x: -56, z: -26, r: 11 },   // 3 ruinas del enigma
-  { x: 2, z: 60, r: 11 },      // 4 santuario arcade
-  { x: -16, z: -60, r: 10 },   // 5 forja de skills
-  { x: 58, z: 40, r: 13 },     // 6 colina del tiempo
-  { x: -70, z: 10, r: 11 }     // 7 faro de señales
+  { x: 2, z: 60, r: 11 },      // 3 santuario arcade
+  { x: -16, z: -60, r: 10 },   // 4 forja de skills
+  { x: 58, z: 40, r: 13 },     // 5 colina del tiempo
+  { x: -70, z: 10, r: 11 }     // 6 faro de señales
 ];
 
 /* ============================================================
@@ -5763,12 +5768,12 @@ function islandHeight(x, z) {
    props sitting on top of it: the cat rides the heightmap
    analytically, so anything walkable has to be in the field.
    ============================================================ */
-/* Bearing 80°. Not just "between two temple roads" — the whole approach has
-   to be flat. At 62° the way to the bridgehead climbed a 14m hill and the
-   bridge ended up marooned on top of it; at 80° the ground never rises above
-   1.3m from the plaza all the way to the beach, and the bridgehead sits a
-   17m walk off the Arcade temple's road. */
-const BRG = 80 * Math.PI / 180;
+/* The bridge takes over the road the Ruins of the Riddle used to sit on:
+   straight out of the plaza, past the old site, onto the beach. Any bearing
+   works for the walk because the road itself is in PATH_LINES and flatMask
+   carves a level corridor along it — what matters is that the player already
+   has a reason to walk this way. */
+const BRG = Math.atan2(-26, -56);
 const BU = { x: Math.cos(BRG), z: Math.sin(BRG) };
 const atR = r => ({ x: BU.x * r, z: BU.z * r });
 
@@ -5779,10 +5784,10 @@ const BRIDGE_A = atR(coastRadius(BRG) - 5);     // bridgehead on the beach
    nominal radius would sometimes stop short of the rock */
 const BRIDGE_B = atR(140 - ISLET_R + 6);
 const BRIDGE_HALF = 2.5;
-/* a spur branching off the Arcade road, so the way to the bridge is trodden
-   ground like everywhere else worth walking to. Pushed here rather than
-   declared with the others because it needs BRIDGE_A. */
-const BRIDGE_ROAD = { x1: 1.5, z1: 45, x2: BRIDGE_A.x, z2: BRIDGE_A.z };
+/* The eighth road out of the plaza, in place of the one that used to end at
+   the Ruins. Pushed here rather than declared with the others because it
+   needs BRIDGE_A. */
+const BRIDGE_ROAD = { x1: 0, z1: 0, x2: BRIDGE_A.x, z2: BRIDGE_A.z };
 PATH_LINES.push(BRIDGE_ROAD);
 const BRIDGE_Y0 = islandHeight(BRIDGE_A.x, BRIDGE_A.z) + .35;
 
@@ -5814,37 +5819,48 @@ function bridgeSide(x, z, t) {
 }
 const bridgeDeckY = t => BRIDGE_Y0 + (ISLET_Y - BRIDGE_Y0) * t;
 
-/* Height of anything offshore — deck or islet — or null out at sea.
-   Kept separate from islandHeight so the vertex colouring can tell the
-   two apart: run through the island's shore gradient, the islet would
-   come out as one flat sheet of wet sand. */
-function offshoreHeight(x, z) {
-  let h = null;
+/* The deck is walkable, so it has to be in the height field — but it must not
+   be in the *terrain*, or the island mesh grows a 5m ridge of grass along the
+   whole span and the bridge ends up standing on a causeway. Hence two
+   functions: terrainHeight() is what gets displaced into the mesh and
+   coloured, heightAt() is what the cat rides. */
+function bridgeHeight(x, z) {
   const t = bridgeT(x, z);
-  if (bridgeSide(x, z, t) <= BRIDGE_HALF + 1.2) h = bridgeDeckY(t);
+  return bridgeSide(x, z, t) <= BRIDGE_HALF + 1.2 ? bridgeDeckY(t) : null;
+}
 
+/* Kept apart from islandHeight so the vertex colouring can tell the two
+   apart: run through the island's shore gradient, the islet would come out as
+   one flat sheet of wet sand 60 units past a coastline it has nothing to do
+   with. Returns null out at sea. */
+function isletHeight(x, z) {
+  let h = null;
   const d = Math.hypot(x - ISLET.x, z - ISLET.z);
-  let ih = null;
   if (d <= ISLET_R * 1.2 + 12) {
     const edge = isletEdge(Math.atan2(z - ISLET.z, x - ISLET.x));
     /* the top stays dead flat: the tunnel floor is a level slab across the
        middle of it, and any relief here would show through the planks */
-    ih = ISLET_Y - Math.max(0, d - (edge - 2)) * 2.6;
+    h = ISLET_Y - Math.max(0, d - (edge - 2)) * 2.6;
   }
   for (const c of CRAGS) {
     const cd = Math.hypot(x - c.p.x, z - c.p.z);
     if (cd >= c.r) continue;
     const ch = ISLET_Y + (1 - cd / c.r) * c.h;
-    ih = ih === null ? ch : Math.max(ih, ch);
+    h = h === null ? ch : Math.max(h, ch);
   }
-  if (ih !== null) h = h === null ? ih : Math.max(h, ih);
   return h;
 }
 
-function heightAt(x, z) {
-  const o = offshoreHeight(x, z);
+function terrainHeight(x, z) {
+  const i = isletHeight(x, z);
   const h = islandHeight(x, z);
-  return o === null ? h : Math.max(h, o);
+  return i === null ? h : Math.max(h, i);
+}
+
+function heightAt(x, z) {
+  const b = bridgeHeight(x, z);
+  const h = terrainHeight(x, z);
+  return b === null ? h : Math.max(h, b);
 }
 
 /* Keep the cat on solid ground: the beach, the deck, or the islet.
@@ -6255,12 +6271,21 @@ class Game {
     return mesh;
   }
 
-  /* invisible static box collider */
-  sbox(sx, sy, sz, x, y, z, ry = 0) {
+  /* Invisible static box collider. `rx` tilts it after the yaw — built by
+     composing two axis-angle quaternions rather than passing an Euler triple,
+     because the order the two rotations apply in is the difference between a
+     sloped bridge deck and a deck skewed sideways. */
+  sbox(sx, sy, sz, x, y, z, ry = 0, rx = 0) {
     const body = new CBody({ mass: 0, material: this.groundMat });
     body.addShape(new CBox(new CVec(sx / 2, sy / 2, sz / 2)));
     body.position.set(x, y, z);
-    if (ry) body.quaternion.setFromEuler(0, ry, 0);
+    if (rx) {
+      const Q = body.quaternion.constructor;
+      const qy = new Q(), qp = new Q();
+      qy.setFromAxisAngle(new CVec(0, 1, 0), ry);
+      qp.setFromAxisAngle(new CVec(1, 0, 0), rx);
+      qy.mult(qp, body.quaternion);
+    } else if (ry) body.quaternion.setFromEuler(0, ry, 0);
     this.world.addBody(body);
     return body;
   }
@@ -6543,23 +6568,24 @@ class Game {
           ROCK = new Col(0x4d4a5c), SNOW = new Col(0xcfd6e4);
     const tmp = new Col();
 
+    /* terrainHeight, not heightAt: the bridge deck belongs in the walkable
+       field but not in the ground, or the mesh grows a causeway under it */
     for (let i = 0; i < pos.count; i++) {
       const x = pos.getX(i), y = pos.getY(i);          // plane is XY before rotation
-      const h = heightAt(x, -y);
-      pos.setZ(i, h);
+      pos.setZ(i, terrainHeight(x, -y));
     }
     /* slope needs neighbouring heights, so colour in a second pass */
     for (let i = 0; i < pos.count; i++) {
       const x = pos.getX(i), y = pos.getY(i), z = -y;
       const h = pos.getZ(i);
       const e = 1.6;
-      const slope = Math.min(1, (Math.abs(heightAt(x + e, z) - h) + Math.abs(heightAt(x, z + e) - h)) / e * .8);
+      const slope = Math.min(1, (Math.abs(terrainHeight(x + e, z) - h) + Math.abs(terrainHeight(x, z + e) - h)) / e * .8);
       const tint = fbm(x * .09, z * .09, 2);
 
       /* The islet and the bridge deck are their own place: run through the
          island's shore gradient they would come out as one flat sheet of wet
          sand, 60 units past a coastline they have nothing to do with. */
-      if (offshoreHeight(x, z) !== null && h > islandHeight(x, z)) {
+      if (isletHeight(x, z) !== null && h > islandHeight(x, z)) {
         tmp.copy(ROCK).lerp(GRASS, smoothstep(1, .3, slope) * .5);
         tmp.lerp(SNOW, smoothstep(17, 24, h));
         tmp.multiplyScalar(.8 + tint * .32);
@@ -6612,9 +6638,9 @@ class Game {
     this.outdoorOnly.push(foam);
     this.anims.push(t => { foam.material.opacity = .12 + Math.sin(t * 1.2) * .06; });
 
-    /* ---- dirt paths from plaza to each temple ---- */
+    /* ---- dirt paths from plaza to each temple, and out to the bridge ---- */
     this.pathSegs = [];
-    for (const p of ZONE_POS) {
+    for (const p of ZONE_POS.concat([{ x: BRIDGE_A.x, z: BRIDGE_A.z, r: -2 }])) {
       const dx = p.x, dz = p.z;
       const len = Math.hypot(dx, dz) - p.r - 6;
       const ang = Math.atan2(dx, dz);
@@ -6989,9 +7015,18 @@ class Game {
     this.buildPollen();
   }
 
-  /* ============ the rope bridge and the islet ============
-     The deck is drawn where heightAt() already says the ground is, so the
-     planks and the surface the cat actually walks on can never drift apart. */
+  /* ============ the rope bridge ============
+     Everything here is placed by walking t from 0 to 1 and asking
+     bridgeDeckY(t) where the deck is, so the planks, the beams, the rails and
+     the colliders all sit on the same line the cat walks on. The previous
+     version mixed that up: some pieces were positioned at the midpoint and
+     rotated by the pitch, others at a fixed height, and the rails ran the
+     whole span as one cylinder — so the further you walked the further the
+     handrail drifted from the deck.
+
+     The deck also gets real colliders. The cat rides the heightmap and does
+     not need them, but anything dynamic — a crate, the beach ball — fell
+     straight through the planks into the sea. */
   buildBridge() {
     const ang = Math.atan2(BU.x, BU.z);
     const L = Math.hypot(BRIDGE_B.x - BRIDGE_A.x, BRIDGE_B.z - BRIDGE_A.z);
@@ -7002,57 +7037,98 @@ class Game {
     this.outdoorOnly.push(G);
 
     const plank = this.mat(0x6b4f34, { roughness: 1, flatShading: true });
+    const plankB = this.mat(0x5d442d, { roughness: 1, flatShading: true });
     const beam = this.mat(0x4c3826, { roughness: 1, flatShading: true });
     const rope = this.mat(0x8a7550, { roughness: 1 });
+    /* Rotating a Z-aligned box by +x tips its far end DOWN (Rx sends +Z to
+       -Y), so every piece that runs along the span tilts by -pitch. Getting
+       this backwards is what made the old deck slope against itself. */
+    const pitch = Math.atan2(ISLET_Y - BRIDGE_Y0, L), tilt = -pitch;
+    /* world position of a point on the deck's centreline */
+    const W = t => ({
+      x: BRIDGE_A.x + (BRIDGE_B.x - BRIDGE_A.x) * t,
+      y: bridgeDeckY(t),
+      z: BRIDGE_A.z + (BRIDGE_B.z - BRIDGE_A.z) * t
+    });
 
-    const N = Math.round(L / 1.35);
-    const pitch = Math.atan2(ISLET_Y - BRIDGE_Y0, L);
+    /* ---- deck ---- */
+    const N = Math.round(L / 1.1);
     for (let i = 0; i < N; i++) {
       const t = (i + .5) / N, lz = t * L;
-      const p = this.m(new BoxGeo(BRIDGE_HALF * 2, .18, 1.05), plank,
-        (hash2(i, 3) - .5) * .12, bridgeDeckY(t) - .1, lz, { parent: G, recv: true });
-      p.rotation.x = pitch;
-      p.rotation.z = (hash2(i, 7) - .5) * .05;
+      const p = this.m(new BoxGeo(BRIDGE_HALF * 2, .16, .95), i % 3 ? plank : plankB,
+        (hash2(i, 3) - .5) * .1, bridgeDeckY(t) - .08, lz, { parent: G, recv: true });
+      p.rotation.x = tilt;
+      p.rotation.z = (hash2(i, 7) - .5) * .04;
     }
-    /* the two stringers the planks sit on */
+    /* the two stringers under it, in short pieces that each follow the slope */
     for (const s of [-1, 1]) {
-      const b = this.m(new BoxGeo(.34, .34, L), beam, s * (BRIDGE_HALF - .2),
-        (BRIDGE_Y0 + ISLET_Y) / 2 - .28, L / 2, { parent: G });
-      b.rotation.x = pitch;
+      const b = this.m(new BoxGeo(.3, .3, L), beam, s * (BRIDGE_HALF - .18), (BRIDGE_Y0 + ISLET_Y) / 2 - .3, L / 2,
+        { parent: G });
+      b.rotation.x = tilt;
     }
-    /* trestles marching down into the water */
-    const posts = Math.max(3, Math.round(L / 9));
+
+    /* ---- trestles down into the water, with a cross-brace ---- */
+    const posts = Math.max(3, Math.round(L / 8));
     for (let i = 1; i < posts; i++) {
       const t = i / posts, lz = t * L, dy = bridgeDeckY(t);
-      for (const s of [-1, 1]) {
-        this.m(new CylGeo(.3, .38, dy + 7, 6), beam, s * (BRIDGE_HALF - .1), (dy - 7) / 2, lz,
+      for (const s of [-1, 1])
+        this.m(new CylGeo(.26, .34, dy + 7, 6), beam, s * (BRIDGE_HALF - .05), (dy - 7) / 2, lz,
           { parent: G, recv: true });
-        /* handrail post + rope */
-        this.m(new CylGeo(.13, .15, 1.5, 5), beam, s * BRIDGE_HALF, dy + .65, lz, { parent: G });
-      }
-      this.m(new BoxGeo(BRIDGE_HALF * 2, .2, .3), beam, 0, dy - .5, lz, { parent: G, cast: false });
+      this.m(new BoxGeo(BRIDGE_HALF * 2, .22, .3), beam, 0, dy - .55, lz, { parent: G, cast: false });
+      const brace = this.m(new BoxGeo(BRIDGE_HALF * 2 + .6, .16, .16), beam, 0, dy - 3.4, lz, { parent: G });
+      brace.rotation.z = .18;
     }
-    for (const s of [-1, 1]) for (const hy of [1.35, .75]) {
-      const r = this.m(new CylGeo(.07, .07, L, 5), rope, s * BRIDGE_HALF,
-        (BRIDGE_Y0 + ISLET_Y) / 2 + hy - .1, L / 2, { parent: G, cast: false });
-      r.rotation.x = Math.PI / 2 + pitch;
-    }
-    /* stone abutments at both ends */
-    for (const [lz, dy] of [[-.6, BRIDGE_Y0], [L + .6, ISLET_Y]])
-      this.m(new BoxGeo(BRIDGE_HALF * 2 + 2.4, 2.6, 2.4), this.mat(0x5b5462, { roughness: 1, flatShading: true }),
-        0, dy - 1.5, lz, { parent: G, recv: true });
 
-    /* the spur of trodden ground from the Arcade road down to the bridgehead */
-    {
-      const dx = BRIDGE_ROAD.x2 - BRIDGE_ROAD.x1, dz = BRIDGE_ROAD.z2 - BRIDGE_ROAD.z1;
-      const len = Math.hypot(dx, dz);
-      const tex = this.noiseTexture("#33302a", ["#2a2823", "#3d3931", "#37332c"], 160, 1);
-      tex.repeat.set(1, Math.max(2, Math.round(len / 6)));
-      const seg = this.m(new PlaneGeo(2.6, len), new StdMat({ map: tex, roughness: 1 }),
-        (BRIDGE_ROAD.x1 + BRIDGE_ROAD.x2) / 2, .05, (BRIDGE_ROAD.z1 + BRIDGE_ROAD.z2) / 2,
-        { rx: -Math.PI / 2, cast: false, recv: true });
-      seg.rotation.z = -Math.atan2(dx, dz);
-      this.outdoorOnly.push(seg);
+    /* ---- railing ----
+       Posts every couple of metres, and the rails built as one short segment
+       between consecutive posts, so the handrail tracks the deck exactly
+       instead of being one long stick pinned at its middle. */
+    const RP = Math.max(4, Math.round(L / 2.4));
+    const railH = [.55, 1.15];
+    for (const s of [-1, 1]) {
+      for (let i = 0; i <= RP; i++) {
+        const t = i / RP;
+        this.m(new CylGeo(.09, .11, 1.4, 5), beam, s * BRIDGE_HALF, bridgeDeckY(t) + .6, t * L,
+          { parent: G, recv: true });
+      }
+      for (let i = 0; i < RP; i++) {
+        const t0 = i / RP, t1 = (i + 1) / RP;
+        for (const hy of railH) {
+          const y0 = bridgeDeckY(t0) + hy, y1 = bridgeDeckY(t1) + hy;
+          const dz = (t1 - t0) * L, dy = y1 - y0;
+          const seg = this.m(new CylGeo(.055, .055, Math.hypot(dz, dy), 5), rope,
+            s * BRIDGE_HALF, (y0 + y1) / 2, (t0 + t1) / 2 * L, { parent: G, cast: false });
+          seg.rotation.x = Math.PI / 2 - Math.atan2(dy, dz);
+        }
+      }
+    }
+
+    /* ---- colliders ----
+       A chain of flat boxes along the deck plus a low kerb each side. Cannon
+       has no heightfield here, so without these the bridge is scenery a crate
+       drops through. */
+    /* One tilted slab for the whole span, not a staircase of flat ones: a
+       chain of level boxes leaves each of them proud of the deck at its
+       downhill end, and things come to rest hovering above the planks. */
+    const mid = W(.5);
+    this.sbox(BRIDGE_HALF * 2, .5, L + 2, mid.x, mid.y - .25, mid.z, ang, tilt);
+    /* The kerb sits a whole cat-radius outside the railing on purpose.
+       confineOutdoors already clamps the cat's centre to BRIDGE_HALF, and its
+       collision sphere is .8 wide — a kerb flush with the rail would be
+       permanently inside the cat and fight the clamp every frame. */
+    for (const s of [-1, 1]) {
+      const off = BRIDGE_HALF + 1;
+      const ox = Math.cos(ang) * s * off, oz = -Math.sin(ang) * s * off;
+      this.sbox(.4, .6, L + 2, mid.x + ox, mid.y + .3, mid.z + oz, ang, tilt);
+    }
+
+    /* ---- abutments and landings ---- */
+    const stone = this.mat(0x5b5462, { roughness: 1, flatShading: true });
+    for (const [t, lz] of [[0, -1.1], [1, L + 1.1]]) {
+      const dy = bridgeDeckY(t);
+      this.m(new BoxGeo(BRIDGE_HALF * 2 + 2.6, 3, 2.6), stone, 0, dy - 1.6, lz, { parent: G, recv: true });
+      for (const s of [-1, 1])
+        this.m(new BoxGeo(.9, 1.5, .9), stone, s * (BRIDGE_HALF + .9), dy + .5, lz, { parent: G, recv: true });
     }
 
     /* two cairns on the beach so the bridgehead is findable without a sign */
@@ -7061,7 +7137,7 @@ class Game {
       const bz = BRIDGE_A.z - BU.z * 5 - BU.x * s * 3.4;
       const y = heightAt(bx, bz);
       for (let k = 0; k < 3; k++)
-        this.m(new DodGeo(.5 - k * .12, 0), k % 2 ? beam : this.mat(0x5b5462, { roughness: 1, flatShading: true }),
+        this.m(new DodGeo(.5 - k * .12, 0), k % 2 ? beam : stone,
           bx, y + .3 + k * .5, bz, { recv: true, ry: hash2(k, s + 2) * 6 });
     }
 
@@ -7151,8 +7227,8 @@ class Game {
       const a = (i / n) * 6.283 + hash2(i, 3) * .09;
       const R = coastRadius(a) - 1 + (hash2(i, 7) - .5) * 7;
       const x = Math.cos(a) * R, z = Math.sin(a) * R;
-      const y = heightAt(x, z);
-      if (y < -2.5) continue;
+      const y = terrainHeight(x, z);        // never perch a boulder on the deck
+      if (y < -2.5 || bridgeSide(x, z, bridgeT(x, z)) < 6) continue;
       const s = .5 + hash2(i, 11) * 1.7;
       const rk = this.m(new DodGeo(s, 0), y < .35 ? wet : dry, x, y + s * .3, z, { recv: true });
       rk.rotation.set(hash2(i, 1) * 3, hash2(i, 2) * 6, hash2(i, 3) * 3);
@@ -7425,7 +7501,6 @@ class Game {
     this.buildHouse();
     this.buildLab();
     this.buildWarehouse();
-    this.buildRuins();
     this.buildArcade();
     this.buildForge();
     this.buildHill();
@@ -7740,107 +7815,22 @@ class Game {
     this.registerZone(2, { labelY: 11, lightY: 8 });
   }
 
-  /* ============ 3 · Ruinas del Enigma (Mastermind) ============ */
-  buildRuins() {
-    const p = ZONE_POS[3];
-    const G = new Grp(); G.position.set(p.x, 0, p.z); this.scene.add(G);
-    const stoneM = this.mat(0x6a6478, { roughness: .9 });
-    const mossM = this.mat(0x4a6455, { roughness: 1 });
-
-    /* three stone steps */
-    this.m(new CylGeo(10, 10.6, .45, 24), stoneM, 0, .22, 0, { parent: G, recv: true });
-    this.m(new CylGeo(8.4, 9, .45, 24), mossM, 0, .67, 0, { parent: G, recv: true });
-    this.m(new CylGeo(7, 7.6, .45, 24), stoneM, 0, 1.1, 0, { parent: G, recv: true });
-    this.scyl(10.2, .5, p.x, .25, p.z);
-    this.scyl(8.7, .95, p.x, .45, p.z);
-    this.scyl(7.2, 1.35, p.x, .67, p.z);
-
-    /* ring of columns — some intact, some broken */
-    const colGeo = new CylGeo(.55, .65, 4.6, 9);
-    const capGeo = new BoxGeo(1.5, .4, 1.5);
-    for (let i = 0; i < 8; i++) {
-      const a = i / 8 * Math.PI * 2 + .4;
-      const cx = Math.cos(a) * 6, cz = Math.sin(a) * 6;
-      if (i === 2) {           // broken stump
-        this.m(new CylGeo(.6, .65, 1.4, 9), stoneM, cx, 2, cz, { parent: G, rz: .16 });
-        this.scyl(.7, 2, p.x + cx, 1, p.z + cz);
-      } else if (i === 5) {    // fallen column you can roll
-        const fx = p.x + cx + 2, fz = p.z + cz + 1;
-        const mesh = this.m(new CylGeo(.55, .55, 4, 9), stoneM, fx, 1.9, fz, {});
-        const body = new CBody({ mass: 4 });
-        body.addShape(new CCyl(.55, .55, 4, 9));
-        body.position.set(fx, 1.9, fz);
-        body.quaternion.setFromEuler(0, 0, Math.PI / 2);
-        this.world.addBody(body);
-        this.sync.push({ mesh, body });
-      } else {
-        this.m(colGeo, stoneM, cx, 3.6, cz, { parent: G });
-        this.m(capGeo, mossM, cx, 6, cz, { parent: G });
-        this.scyl(.7, 4.8, p.x + cx, 2.4, p.z + cz);
-      }
-    }
-    /* broken arch fragments on the ground */
-    this.m(new BoxGeo(1.8, .5, .9), stoneM, 8, .45, 3, { parent: G, ry: .5 });
-    this.m(new BoxGeo(1.1, .5, .8), mossM, 8.8, .4, 1.5, { parent: G, ry: 1.2 });
-
-    /* central altar with the secret code orbs */
-    this.m(new BoxGeo(2.6, 1.3, 2.6), stoneM, 0, 1.95, 0, { parent: G });
-    this.m(new BoxGeo(3.2, .3, 3.2), mossM, 0, 2.7, 0, { parent: G });
-    this.sbox(3.2, 3, 3.2, p.x, 1.5, p.z);
-    const orbCols = [0x7fdca8, 0xe8b06a, 0xf2a2c4, 0x8fb0ff, 0xf07a6a, 0xffd76a];
-    this.mmOrbs = [];
-    for (let i = 0; i < 4; i++) {
-      const a = i / 4 * Math.PI * 2;
-      const orb = this.m(new SphGeo(.42, 14, 10),
-        new StdMat({ color: orbCols[i], emissive: new Col(orbCols[i]), emissiveIntensity: 1.2, roughness: .25 }),
-        Math.cos(a) * 1.9, 3.6, Math.sin(a) * 1.9, { parent: G, cast: false });
-      this.mmOrbs.push({ orb, ci: i, a });
-      /* colored floor tile under each orb */
-      this.m(new CircleGeo(.75, 16), this.bmat(orbCols[i], { transparent: true, opacity: .35 }),
-        Math.cos(a) * 4.6, 1.36, Math.sin(a) * 4.6, { parent: G, rx: -Math.PI / 2, cast: false });
-    }
-    const altarLight = this.altarLight = this.addLight(p.x, 4, p.z, 0xf2a2c4, 8, 22);
-    let lastShuffle = 0;
-    this.anims.push(t => {
-      if (!state.mmSolved) altarLight.color.set(orbCols[this.mmOrbs[0].ci]);
-      for (const o of this.mmOrbs) {
-        o.orb.position.y = 3.6 + Math.sin(t * 1.6 + o.a * 2) * .22;
-        o.orb.rotation.y = t;
-      }
-      /* the code keeps mutating until somebody actually cracks it */
-      if (!state.mmSolved && t - lastShuffle > 2.4) {
-        lastShuffle = t;
-        for (const o of this.mmOrbs) {
-          o.ci = (o.ci + 1 + Math.floor(Math.random() * 2)) % orbCols.length;
-          const c = new Col(orbCols[o.ci]);
-          o.orb.material.color.copy(c);
-          o.orb.material.emissive.copy(c);
-        }
-      }
-    });
-    /* braziers with fire */
-    this.m(new CylGeo(.5, .35, 1, 8), stoneM, 4.4, 1.85, -4.4, { parent: G });
-    this.m(new CylGeo(.5, .35, 1, 8), stoneM, -4.4, 1.85, 4.4, { parent: G });
-    this.makeFire(p.x + 4.4, 2.3, p.z - 4.4, .7, 0xf2a2c4);
-    this.makeFire(p.x - 4.4, 2.3, p.z + 4.4, .7, 0xf2a2c4);
-
-    this.registerZone(3, { labelY: 11.5 });
-  }
-  /* called by the Mastermind minigame once the player solves it */
+  /* Called by the Mastermind minigame once the player solves it. The orbs it
+     lights used to be the ones in the Ruins; now that the riddle only exists
+     underground, they are the four in the niches of the Crypt of the Code. */
   lockRuneOrbs(colors) {
     if (!this.mmOrbs) return;
-    this.mmOrbs.forEach((o, i) => {
+    this.mmOrbs.forEach((orb, i) => {
       const c = new Col(colors[i % colors.length]);
-      o.orb.material.color.copy(c);
-      o.orb.material.emissive.copy(c);
-      o.orb.material.emissiveIntensity = 1.8;
+      orb.material.color.copy(c);
+      orb.material.emissive.copy(c);
+      orb.material.emissiveIntensity = 1.9;
     });
-    if (this.altarLight) this.altarLight.intensity = 13;
   }
 
-  /* ============ 4 · Santuario Arcade (gamedev) ============ */
+  /* ============ 3 · Santuario Arcade (gamedev) ============ */
   buildArcade() {
-    const p = ZONE_POS[4];
+    const p = ZONE_POS[3];
     const G = new Grp(); G.position.set(p.x, 0, p.z);
     G.rotation.y = Math.atan2(-p.x, -p.z) + Math.PI;
     this.scene.add(G);
@@ -7950,12 +7940,12 @@ class Game {
     const archMid = rot(0, -8.4);
     this.addLight(archMid.x, 3.4, archMid.z, 0x7ce8e0, 6, 16);
 
-    this.registerZone(4, { labelY: 12 });
+    this.registerZone(3, { labelY: 12 });
   }
 
-  /* ============ 5 · La Forja de Skills ============ */
+  /* ============ 4 · La Forja de Skills ============ */
   buildForge() {
-    const p = ZONE_POS[5];
+    const p = ZONE_POS[4];
     const G = new Grp(); G.position.set(p.x, 0, p.z);
     G.rotation.y = Math.atan2(-p.x, -p.z) + Math.PI;
     this.scene.add(G);
@@ -8031,12 +8021,12 @@ class Game {
     this.m(new CylGeo(.06, .06, 1.3, 5), this.mat(0x8a6a4a), .5, 1.5, .15, { parent: RK });
     this.m(new BoxGeo(.4, .22, .1), darkM, .5, 2.05, .15, { parent: RK });
 
-    this.registerZone(5, { labelY: 10.5 });
+    this.registerZone(4, { labelY: 10.5 });
   }
 
-  /* ============ 6 · La Colina del Tiempo (path) ============ */
+  /* ============ 5 · La Colina del Tiempo (path) ============ */
   buildHill() {
-    const p = ZONE_POS[6];
+    const p = ZONE_POS[5];
     const G = new Grp(); G.position.set(p.x, 0, p.z); this.scene.add(G);
     const earthCols = [0x3a5a34, 0x46683c, 0x527544];
     const eras = [
@@ -8130,12 +8120,12 @@ class Game {
     const flag = this.m(new PlaneGeo(1.9, 1.2), new BasicMat({ map: flagTex, side: SIDE_DOUBLE }), 3, 8.4, 1.6, { parent: G, cast: false });
     this.anims.push(t => { flag.rotation.y = Math.sin(t * 2.2) * .3; flag.scale.y = 1 + Math.sin(t * 4.4) * .04; });
 
-    this.registerZone(6, { labelY: 13.5, lightY: 9 });
+    this.registerZone(5, { labelY: 13.5, lightY: 9 });
   }
 
-  /* ============ 7 · El Faro de Señales (contact) ============ */
+  /* ============ 6 · El Faro de Señales (contact) ============ */
   buildLighthouse() {
-    const p = ZONE_POS[7];
+    const p = ZONE_POS[6];
     const G = new Grp(); G.position.set(p.x, 0, p.z); this.scene.add(G);
 
     /* rocky outcrop */
@@ -8226,7 +8216,7 @@ class Game {
       buoyLight.material.emissiveIntensity = (Math.sin(t * 3) > .4) ? 2.4 : .3;
     });
 
-    this.registerZone(7, { labelY: 17, lightY: 6 });
+    this.registerZone(6, { labelY: 17, lightY: 6 });
   }
 
   /* ============ golden fish collectibles ============ */
@@ -8252,12 +8242,12 @@ class Game {
       [-66, -34, 1.1],          /* far ruins corner */
       [10, 70, 1.2],            /* behind the arcade */
       [-28, -68, 1.1],          /* forge outskirts */
-      [ZONE_POS[6].x, ZONE_POS[6].z, 6.6],   /* hilltop! */
+      [ZONE_POS[5].x, ZONE_POS[5].z, 6.6],   /* hilltop! */
       [-70 + Math.sin(Math.atan2(-70, 10)) * 0, 10 + 0, 1], /* placeholder replaced below */
       [0, -34, 1.1]             /* south path */
     ];
     /* fish 10: end of the lighthouse pier */
-    const p7 = ZONE_POS[7], ang7 = Math.atan2(p7.x, p7.z);
+    const p7 = ZONE_POS[6], ang7 = Math.atan2(p7.x, p7.z);
     spots[10] = [p7.x + Math.sin(ang7) * 17.5, p7.z + Math.cos(ang7) * 17.5, 2];
     for (const [x, z, y0] of spots) {
       const y = y0 + Math.max(0, heightAt(x, z));
@@ -8901,6 +8891,7 @@ class Game {
     const H = new Grp(); H.position.set(n.x, CAVE_Y, n.z); this.caveGrp.add(H);
     const orbCols = [0x7fdca8, 0xe8b06a, 0xf2a2c4, 0x8fb0ff];
     /* niches carved into the wall, each holding one orb of the code */
+    this.mmOrbs = [];
     for (let i = 0; i < 4; i++) {
       const a = -1.1 + i * .73, r = n.r - 2.5;
       const px = Math.cos(a) * r, pz = Math.sin(a) * r;
@@ -8912,6 +8903,7 @@ class Game {
         0, 2.5, .9, { parent: N, cast: false });
       this.anims.push(t => { orb.position.y = 2.5 + Math.sin(t * 1.3 + i * 1.7) * .2; });
       this.addLight(n.x + px, CAVE_Y + 2.6, n.z + pz, orbCols[i], 5, 14);
+      this.mmOrbs.push(orb);
     }
     /* broken columns and a sarcophagus lid on the floor */
     for (let i = 0; i < 5; i++) {
