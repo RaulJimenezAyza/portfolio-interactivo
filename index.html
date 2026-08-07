@@ -5688,7 +5688,6 @@ const FLAT_DISCS = [
   { x: -20, z: 12, r: 10, fade: 7 },    // pond
   { x: 0, z: -17, r: 9, fade: 7 },      // RAUL letters
   { x: -8, z: 20, r: 7, fade: 6 },      // seesaw
-  { x: -37, z: -5, r: 15, fade: 12 },   // cave entrance pad (hillside west of the plaza)
   { x: 24, z: -2, r: 8, fade: 6 },      // ramp
   { x: -26, z: 2, r: 8, fade: 6 },      // ramp
   ...ZONE_POS.map(p => ({ x: p.x, z: p.z, r: p.r + 3, fade: 8 }))
@@ -5726,9 +5725,9 @@ function coastRadius(ang) {
     + 6 * Math.sin(ang * 2 + 2.3);
 }
 
-/* Height of the ground at any point. Always >= 0 on land, so the
-   flat physics plane never pokes through the terrain. */
-function heightAt(x, z) {
+/* Height of the main island. Always >= 0 on land, so the flat
+   physics plane never pokes through the terrain. */
+function islandHeight(x, z) {
   const d = Math.hypot(x, z);
   const R = coastRadius(Math.atan2(z, x));
   const t = d / R;
@@ -5749,6 +5748,124 @@ function heightAt(x, z) {
 }
 
 /* ============================================================
+   THE CRAG AND THE BRIDGE
+
+   The cave used to open in the flank of the island itself, and the
+   rock face it needed to look like a cave took up a whole quadrant
+   of the map and sat on top of the hillside. It lives on its own
+   islet now, off the north-east shore, reached by a rope bridge —
+   so the only thing the island has to give up is a bridgehead on an
+   empty stretch of beach.
+
+   Both the bridge deck and the islet are part of heightAt(), not
+   props sitting on top of it: the cat rides the heightmap
+   analytically, so anything walkable has to be in the field.
+   ============================================================ */
+const BRG = 62 * Math.PI / 180;                 // bearing, chosen to sit between two temple roads
+const BU = { x: Math.cos(BRG), z: Math.sin(BRG) };
+const atR = r => ({ x: BU.x * r, z: BU.z * r });
+
+const ISLET_R = 28, ISLET_Y = 4;
+const ISLET = atR(140);
+const BRIDGE_A = atR(coastRadius(BRG) - 5);     // bridgehead on the beach
+/* lands well inside the islet: the outline is noisy, and a deck ending on the
+   nominal radius would sometimes stop short of the rock */
+const BRIDGE_B = atR(140 - ISLET_R + 6);
+const BRIDGE_HALF = 2.5;
+const BRIDGE_Y0 = islandHeight(BRIDGE_A.x, BRIDGE_A.z) + .35;
+
+/* The crag the cave is bored into. Three cones, all of them starting past
+   r=138: the tunnel ends at 137, and terrain that reaches any further forward
+   pokes up through the floor of the bore. The tallest sits behind the islet
+   with its foot in the water, so the whole thing reads as a peak rising out
+   of the sea rather than as a disc with a bump on it. */
+const CRAGS = [
+  { p: atR(150), r: 12, h: 26 },   // rises immediately behind the portal
+  { p: { x: BU.x * 148 - BU.z * 13, z: BU.z * 148 + BU.x * 13 }, r: 10, h: 14 },
+  { p: atR(164), r: 20, h: 34 }    // the peak, foot in the water
+];
+
+/* an irregular outline, or the islet reads as a poker chip. Both the height
+   field and the confinement clamp go through this, so the edge you can see is
+   the edge you can walk to. */
+const isletEdge = a => ISLET_R * (.88 + .24 * fbm(Math.cos(a) * 3 + 11, Math.sin(a) * 3 - 4, 2));
+
+function bridgeT(x, z) {
+  const dx = BRIDGE_B.x - BRIDGE_A.x, dz = BRIDGE_B.z - BRIDGE_A.z;
+  const len2 = dx * dx + dz * dz;
+  return clamp01(((x - BRIDGE_A.x) * dx + (z - BRIDGE_A.z) * dz) / len2);
+}
+function bridgeSide(x, z, t) {
+  const px = BRIDGE_A.x + (BRIDGE_B.x - BRIDGE_A.x) * t;
+  const pz = BRIDGE_A.z + (BRIDGE_B.z - BRIDGE_A.z) * t;
+  return Math.hypot(x - px, z - pz);
+}
+const bridgeDeckY = t => BRIDGE_Y0 + (ISLET_Y - BRIDGE_Y0) * t;
+
+/* Height of anything offshore — deck or islet — or null out at sea.
+   Kept separate from islandHeight so the vertex colouring can tell the
+   two apart: run through the island's shore gradient, the islet would
+   come out as one flat sheet of wet sand. */
+function offshoreHeight(x, z) {
+  let h = null;
+  const t = bridgeT(x, z);
+  if (bridgeSide(x, z, t) <= BRIDGE_HALF + 1.2) h = bridgeDeckY(t);
+
+  const d = Math.hypot(x - ISLET.x, z - ISLET.z);
+  let ih = null;
+  if (d <= ISLET_R * 1.2 + 12) {
+    const edge = isletEdge(Math.atan2(z - ISLET.z, x - ISLET.x));
+    /* the top stays dead flat: the tunnel floor is a level slab across the
+       middle of it, and any relief here would show through the planks */
+    ih = ISLET_Y - Math.max(0, d - (edge - 2)) * 2.6;
+  }
+  for (const c of CRAGS) {
+    const cd = Math.hypot(x - c.p.x, z - c.p.z);
+    if (cd >= c.r) continue;
+    const ch = ISLET_Y + (1 - cd / c.r) * c.h;
+    ih = ih === null ? ch : Math.max(ih, ch);
+  }
+  if (ih !== null) h = h === null ? ih : Math.max(h, ih);
+  return h;
+}
+
+function heightAt(x, z) {
+  const o = offshoreHeight(x, z);
+  const h = islandHeight(x, z);
+  return o === null ? h : Math.max(h, o);
+}
+
+/* Keep the cat on solid ground: the beach, the deck, or the islet.
+   One radial clamp against the coastline is no longer enough now that
+   there is somewhere to walk to past it. */
+function confineOutdoors(p) {
+  const t = bridgeT(p.x, p.z);
+  const side = bridgeSide(p.x, p.z, t);
+  const dIsl = Math.hypot(p.x - ISLET.x, p.z - ISLET.z);
+  if (side <= BRIDGE_HALF + 1.6 && dIsl > 20) {
+    if (side > BRIDGE_HALF) {                    // slide back onto the planks
+      const px = BRIDGE_A.x + (BRIDGE_B.x - BRIDGE_A.x) * t;
+      const pz = BRIDGE_A.z + (BRIDGE_B.z - BRIDGE_A.z) * t;
+      const k = BRIDGE_HALF / side;
+      p.x = px + (p.x - px) * k; p.z = pz + (p.z - pz) * k;
+    }
+    return;
+  }
+  if (dIsl < ISLET_R * 1.2 + 4) {
+    const edge = isletEdge(Math.atan2(p.z - ISLET.z, p.x - ISLET.x)) - 1.5;
+    if (dIsl > edge) {
+      const k = edge / dIsl;
+      p.x = ISLET.x + (p.x - ISLET.x) * k; p.z = ISLET.z + (p.z - ISLET.z) * k;
+    }
+    return;
+  }
+  const dOut = Math.hypot(p.x, p.z);
+  const limit = coastRadius(Math.atan2(p.z, p.x)) - 2;
+  if (dOut > limit) { const k = limit / dOut; p.x *= k; p.z *= k; return true; }
+  return false;
+}
+
+/* ============================================================
    CAVE NETWORK
 
    The caverns are built in an empty patch of world far out in XZ,
@@ -5764,18 +5881,17 @@ function heightAt(x, z) {
    screen dims, and they walk out the other side.
    ============================================================ */
 const CAVE_ORIGIN = { x: 0, z: 4000 };
-/* The mouth sits at the foot of the western ridge, a short walk from the
-   plaza rather than out in the far corner. The ground in front of it is flat
-   and the hill behind rises to ~10m, so the tunnel reads as bored into a real
-   hillside without any of it being dug under walkable terrain. */
-const CAVE_MOUTH = { x: -37, z: -5 };
+/* The mouth is on the islet, at the foot of the crag, facing back down the
+   bridge. Off the island entirely: the rock face a cave mouth needs to look
+   like a cave was swallowing a whole quadrant of the map. */
+const CAVE_MOUTH = atR(124);
 
-/* entrance corridor on the island: straight, level, roofed. Short enough to
-   stay entirely inside the flattened pad — past the pad the hill takes over,
-   and a corridor reaching into it would be buried by the terrain mesh. */
-const ENTRY_DIR = Math.atan2(CAVE_MOUTH.x, CAVE_MOUTH.z);   // points away from the plaza
+/* entrance corridor: straight, level, roofed, sitting on the islet shelf.
+   Short enough to stop before the crag cones start rising at r=138 — a
+   corridor reaching into them would be buried by the terrain mesh. */
+const ENTRY_DIR = Math.atan2(CAVE_MOUTH.x, CAVE_MOUTH.z);   // points into the crag
 const ENTRY_LEN = 13;
-const ENTRY_HALF = 3.6;
+const ENTRY_HALF = 3.2;
 function entryAxis(t) {
   return { x: CAVE_MOUTH.x + Math.sin(ENTRY_DIR) * ENTRY_LEN * t,
            z: CAVE_MOUTH.z + Math.cos(ENTRY_DIR) * ENTRY_LEN * t };
@@ -6401,7 +6517,8 @@ class Game {
        A subdivided plane displaced by heightAt(), tinted per vertex so sand,
        grass, rock and the odd snowy top come from the shape itself instead of
        a texture that would stretch over the slopes. */
-    const SEG = IS_TOUCH ? 110 : 200, SIZE = 300;
+    /* wide enough to contain the islet and its crag, which reach r=168 */
+    const SEG = IS_TOUCH ? 128 : 224, SIZE = 372;
     const geo = new PlaneGeo(SIZE, SIZE, SEG, SEG);
     const pos = geo.attributes.position;
     const colors = new Float32Array(pos.count * 3);
@@ -6427,6 +6544,16 @@ class Game {
       const slope = Math.min(1, (Math.abs(heightAt(x + e, z) - h) + Math.abs(heightAt(x, z + e) - h)) / e * .8);
       const tint = fbm(x * .09, z * .09, 2);
 
+      /* The islet and the bridge deck are their own place: run through the
+         island's shore gradient they would come out as one flat sheet of wet
+         sand, 60 units past a coastline they have nothing to do with. */
+      if (offshoreHeight(x, z) !== null && h > islandHeight(x, z)) {
+        tmp.copy(ROCK).lerp(GRASS, smoothstep(1, .3, slope) * .5);
+        tmp.lerp(SNOW, smoothstep(17, 24, h));
+        tmp.multiplyScalar(.8 + tint * .32);
+        colors[i * 3] = tmp.r; colors[i * 3 + 1] = tmp.g; colors[i * 3 + 2] = tmp.b;
+        continue;
+      }
       const shore = Math.hypot(x, z) / coastRadius(Math.atan2(z, x));
       tmp.copy(GRASS).lerp(GRASS2, tint);
       tmp.lerp(MEADOW, smoothstep(4, .5, h) * (.35 + tint * .4));   // lush in the hollows
@@ -6722,14 +6849,8 @@ class Game {
     if (Math.hypot(x - this.pondPos.x, z - this.pondPos.z) < this.pondPos.r + 2) return false;
     if (Math.hypot(x - 15, z - 5) < 14) return false;                        // playground
     if (Math.hypot(x + 12, z + 10) < 8) return false;
-    /* the cave mouth and the ground it is dug into: without this, trees and
-       grass sprout inside the tunnel */
-    {
-      const t = segT(x, z, CAVE_MOUTH, ENTRY_END);
-      const px = CAVE_MOUTH.x + (ENTRY_END.x - CAVE_MOUTH.x) * t;
-      const pz = CAVE_MOUTH.z + (ENTRY_END.z - CAVE_MOUTH.z) * t;
-      if (Math.hypot(x - px, z - pz) < 11) return false;
-    }
+    /* keep the bridgehead clear so the way across is not behind a pine */
+    if (bridgeSide(x, z, bridgeT(x, z)) < 9) return false;
     for (const p of ZONE_POS) if (Math.hypot(x - p.x, z - p.z) < p.r + margin) return false;
     for (const s of this.pathSegs) {
       const dx = s.x2 - s.x1, dz = s.z2 - s.z1;
@@ -6851,7 +6972,93 @@ class Game {
     this.buildGrass();
     this.buildShore();
     this.buildOutcrops();
+    this.buildBridge();
     this.buildPollen();
+  }
+
+  /* ============ the rope bridge and the islet ============
+     The deck is drawn where heightAt() already says the ground is, so the
+     planks and the surface the cat actually walks on can never drift apart. */
+  buildBridge() {
+    const ang = Math.atan2(BU.x, BU.z);
+    const L = Math.hypot(BRIDGE_B.x - BRIDGE_A.x, BRIDGE_B.z - BRIDGE_A.z);
+    const G = new Grp();
+    G.position.set(BRIDGE_A.x, 0, BRIDGE_A.z);
+    G.rotation.y = ang;
+    this.scene.add(G);
+    this.outdoorOnly.push(G);
+
+    const plank = this.mat(0x6b4f34, { roughness: 1, flatShading: true });
+    const beam = this.mat(0x4c3826, { roughness: 1, flatShading: true });
+    const rope = this.mat(0x8a7550, { roughness: 1 });
+
+    const N = Math.round(L / 1.35);
+    const pitch = Math.atan2(ISLET_Y - BRIDGE_Y0, L);
+    for (let i = 0; i < N; i++) {
+      const t = (i + .5) / N, lz = t * L;
+      const p = this.m(new BoxGeo(BRIDGE_HALF * 2, .18, 1.05), plank,
+        (hash2(i, 3) - .5) * .12, bridgeDeckY(t) - .1, lz, { parent: G, recv: true });
+      p.rotation.x = pitch;
+      p.rotation.z = (hash2(i, 7) - .5) * .05;
+    }
+    /* the two stringers the planks sit on */
+    for (const s of [-1, 1]) {
+      const b = this.m(new BoxGeo(.34, .34, L), beam, s * (BRIDGE_HALF - .2),
+        (BRIDGE_Y0 + ISLET_Y) / 2 - .28, L / 2, { parent: G });
+      b.rotation.x = pitch;
+    }
+    /* trestles marching down into the water */
+    const posts = Math.max(3, Math.round(L / 9));
+    for (let i = 1; i < posts; i++) {
+      const t = i / posts, lz = t * L, dy = bridgeDeckY(t);
+      for (const s of [-1, 1]) {
+        this.m(new CylGeo(.3, .38, dy + 7, 6), beam, s * (BRIDGE_HALF - .1), (dy - 7) / 2, lz,
+          { parent: G, recv: true });
+        /* handrail post + rope */
+        this.m(new CylGeo(.13, .15, 1.5, 5), beam, s * BRIDGE_HALF, dy + .65, lz, { parent: G });
+      }
+      this.m(new BoxGeo(BRIDGE_HALF * 2, .2, .3), beam, 0, dy - .5, lz, { parent: G, cast: false });
+    }
+    for (const s of [-1, 1]) for (const hy of [1.35, .75]) {
+      const r = this.m(new CylGeo(.07, .07, L, 5), rope, s * BRIDGE_HALF,
+        (BRIDGE_Y0 + ISLET_Y) / 2 + hy - .1, L / 2, { parent: G, cast: false });
+      r.rotation.x = Math.PI / 2 + pitch;
+    }
+    /* stone abutments at both ends */
+    for (const [lz, dy] of [[-.6, BRIDGE_Y0], [L + .6, ISLET_Y]])
+      this.m(new BoxGeo(BRIDGE_HALF * 2 + 2.4, 2.6, 2.4), this.mat(0x5b5462, { roughness: 1, flatShading: true }),
+        0, dy - 1.5, lz, { parent: G, recv: true });
+
+    /* two cairns on the beach so the bridgehead is findable without a sign */
+    for (const s of [-1, 1]) {
+      const bx = BRIDGE_A.x - BU.x * 5 + BU.z * s * 3.4;
+      const bz = BRIDGE_A.z - BU.z * 5 - BU.x * s * 3.4;
+      const y = heightAt(bx, bz);
+      for (let k = 0; k < 3; k++)
+        this.m(new DodGeo(.5 - k * .12, 0), k % 2 ? beam : this.mat(0x5b5462, { roughness: 1, flatShading: true }),
+          bx, y + .3 + k * .5, bz, { recv: true, ry: hash2(k, s + 2) * 6 });
+    }
+
+    /* ---- the islet: pines on the shelf, boulders round the crag ---- */
+    for (let i = 0; i < 9; i++) {
+      const a = hash2(i, 5) * 6.283, r = 8 + hash2(i, 9) * (ISLET_R - 12);
+      const x = ISLET.x + Math.cos(a) * r, z = ISLET.z + Math.sin(a) * r;
+      /* nothing in the doorway or on top of the tunnel */
+      if (Math.abs((x - CAVE_MOUTH.x) * BU.z - (z - CAVE_MOUTH.z) * BU.x) < 8
+          && (x - CAVE_MOUTH.x) * BU.x + (z - CAVE_MOUTH.z) * BU.z > -12) continue;
+      if (bridgeSide(x, z, bridgeT(x, z)) < 5) continue;
+      this.pine(x, z, .7 + hash2(i, 13) * .5);
+    }
+    const crag = this.mat(0x565266, { roughness: 1, flatShading: true });
+    for (let i = 0; i < 12; i++) {
+      const a = hash2(i, 21) * 6.283, r = 6 + hash2(i, 27) * (ISLET_R - 8);
+      const x = ISLET.x + Math.cos(a) * r, z = ISLET.z + Math.sin(a) * r;
+      if (bridgeSide(x, z, bridgeT(x, z)) < 5) continue;
+      const s = .6 + hash2(i, 31) * 1.8;
+      const rk = this.m(new DodGeo(s, 0), crag, x, heightAt(x, z) + s * .35, z, { recv: true });
+      rk.rotation.set(hash2(i, 1) * 3, hash2(i, 2) * 6, hash2(i, 3) * 3);
+      if (s > 1.3) this.addOccluder(x, heightAt(x, z) + s * .35, z, s * .85);
+    }
   }
 
   /* ============ ground cover ============
@@ -8337,80 +8544,54 @@ class Game {
     return A;
   }
 
-  /* ---- the entrance on the island ----
-     A gash in the foot of the western ridge: a wall of boulders with a bored
-     tunnel through it, a short walk from the plaza instead of out in the far
-     corner. Level all the way — the pad it sits on is carved flat, so nothing
-     here is dug under walkable terrain and nothing can be drawn over the cat.
-     Walk far enough in and the crossing happens. */
+  /* ---- the entrance, on the islet ----
+     A portal bored into the foot of the crag, standing on the islet shelf at
+     the far end of the rope bridge. It used to be a wall of stone slabs cut
+     into the island's own hillside, and at the size a cave mouth needs to be
+     it took over a whole quadrant of the map. Out here the crag is terrain,
+     so the entrance itself only has to be a doorway.
+
+     Level all the way: the shelf is flat at ISLET_Y and the crag cones only
+     start rising past the far end of the bore, so nothing here is dug under
+     walkable ground and nothing can be drawn in front of the cat. */
   buildEntrance() {
     const M = new Grp();
-    M.position.set(CAVE_MOUTH.x, 0, CAVE_MOUTH.z);
-    M.rotation.y = ENTRY_DIR;                 // local +Z runs into the hill
+    M.position.set(CAVE_MOUTH.x, ISLET_Y, CAVE_MOUTH.z);
+    M.rotation.y = ENTRY_DIR;                 // local +Z runs into the crag
     this.scene.add(M);
     const stone = this.mat(0x4f4c57, { roughness: 1, flatShading: true });
     const dark = this.mat(0x36343d, { roughness: 1, flatShading: true });
     const pale = this.mat(0x615d68, { roughness: 1, flatShading: true });
-    const R = ENTRY_HALF + 3;
+    const R = ENTRY_HALF + 2.4;
     /* world position of a point given in the group's local frame */
     const W = (dx, dz) => ({ x: CAVE_MOUTH.x + Math.cos(ENTRY_DIR) * dx + Math.sin(ENTRY_DIR) * dz,
                              z: CAVE_MOUTH.z - Math.sin(ENTRY_DIR) * dx + Math.cos(ENTRY_DIR) * dz });
 
-    /* ---- the rock face ----
-       Slabs, not boulders: a wall of tall boxes with a gap in the middle reads
-       as a cliff, where a pile of icosahedra reads as a pile of icosahedra.
-       Each one is turned a few degrees so the face is never a flat plane. */
-    const face = (dx, dz, w, h, d, m, tilt, y0 = -1) => {
-      const b = this.m(new BoxGeo(w, h, d), m, dx, y0 + h / 2, dz, { parent: M, recv: true });
-      b.rotation.y = tilt;
-      b.rotation.z = tilt * .35;
-      const p = W(dx, dz);
-      this.addOccluder(p.x, y0 + h * .45, p.z, Math.max(w, d) * .55);
-    };
-    for (let i = 0; i < 5; i++) {
-      const off = R + 5.4 + i * 4.2;      // clear of the bore, tilt included
-      for (const s of [-1, 1]) {
-        const h = 13 - i * 1.6 + hash2(i, s + 3) * 3;
-        face(s * off, 1.5 - i * .7 + hash2(i, s) * 2, 5.4 + hash2(i, 7) * 2.4, h,
-             5 + hash2(i, 11) * 3, i % 2 ? stone : dark, (hash2(i, s + 9) - .5) * .5);
-      }
-    }
-    /* The mass carrying the tunnel over your head. Everything here starts
-       above the bore — a slab that dips into it would be drawn in front of the
-       inside of the tunnel, which is exactly the overlap this whole layout
-       exists to avoid. */
-    const LID = R + 2.2;
-    face(0, 3.5, R * 2 + 9, 7, 9, dark, .1, LID);
-    face(-5, 11, 14, 9, 12, stone, -.18, LID + 1.5);
-    face(6, 12, 15, 10, 12, dark, .22, LID + .5);
-    face(0, 25, 28, 13, 16, stone, .06, LID - 3);
-    /* loose scree at the foot of the face */
-    for (let i = 0; i < 9; i++) {
-      const dx = (hash2(i, 2) - .5) * 26, dz = -3 + hash2(i, 5) * 5;
-      if (Math.abs(dx) < R + 1.4) continue;
-      const s = .5 + hash2(i, 8) * 1.2;
-      const rk = this.m(new DodGeo(s, 0), i % 2 ? stone : pale, dx, s * .45, dz, { parent: M, recv: true });
-      rk.rotation.set(hash2(i, 1) * 3, hash2(i, 2) * 6, hash2(i, 3) * 3);
-    }
-
-    /* ---- the bore: same round tunnel as underground, capped in black ----
-       The bore is a thin shell, so on its own it leaves a slit of daylight
-       running right through the cliff above and beside it. A solid frame of
-       three boxes closes the tunnel in on every side but the front; the
-       decorative slabs above only have to look like rock, not seal it. */
-    const AMP = .5, IN = R + AMP + .2;
+    /* ---- the bore ----
+       A bare tube is a thin shell and leaves a slit of daylight running
+       straight through the rock above and beside it, so a solid frame closes
+       it in on every side but the front. */
+    const AMP = .45, IN = R + AMP + .2;
     const tube = new Mesh(
       this.rockify(new CylGeo(R, R, ENTRY_LEN + 4, 20, 5, true), AMP, CAVE_MOUTH.x, CAVE_MOUTH.z),
       this.rockWall);
     tube.rotation.x = Math.PI / 2;
     tube.position.set(0, 0, ENTRY_LEN / 2 + 1);
     M.add(tube);
-    const TL = ENTRY_LEN + 5, TZ = ENTRY_LEN / 2 + 1.5;
+    /* The frame only has to be light-tight, not massive: a thick one is the
+       tallest thing on the islet and reads as a shipping container parked in
+       front of the crag. Boulders on top do the silhouette instead. */
+    const TL = ENTRY_LEN + 5, TZ = ENTRY_LEN / 2 + 1.5, FT = 1.6;
     for (const s of [-1, 1])
-      this.m(new BoxGeo(7, IN * 2 + 7, TL), dark, s * (IN + 3.5), 0, TZ, { parent: M, recv: true });
-    this.m(new BoxGeo(IN * 2 + 14, 7, TL), dark, 0, IN + 3.5, TZ, { parent: M, recv: true });
-    /* floor: just proud of the terrain, which is carved flat here and would
-       otherwise z-fight its way up through the tunnel in patches */
+      this.m(new BoxGeo(FT, IN * 2 + FT, TL), stone, s * (IN + FT / 2), 0, TZ, { parent: M, recv: true });
+    this.m(new BoxGeo(IN * 2 + FT * 2, FT, TL), stone, 0, IN + FT / 2, TZ, { parent: M, recv: true });
+    for (let i = 0; i < 10; i++) {
+      const s = 1.6 + hash2(i, 23) * 2.2;
+      const b = this.m(new IcoGeo(s, 0), i % 2 ? stone : dark,
+        (hash2(i, 29) - .5) * (IN * 2 + 4), IN + hash2(i, 33) * 3.4, -1 + i * 1.7,
+        { parent: M, recv: true });
+      b.rotation.set(hash2(i, 1) * 3, hash2(i, 2) * 6, hash2(i, 3) * 3);
+    }
     this.m(new BoxGeo(IN * 2, 1.2, TL), this.mat(0x4b4356, { roughness: 1 }),
       0, -.54, TZ, { parent: M, cast: false, recv: true });
     this.m(new CircleGeo(R, 20), this.bmat(0x03040a), 0, 0, ENTRY_LEN + 2.4,
@@ -8419,97 +8600,64 @@ class Game {
 
     /* the carved arch you step through. TorusGeometry is built in the XY
        plane with its axis on Z, which is already the tunnel axis here. */
-    this.m(new TorusGeo(R + .5, .9, 6, 22, Math.PI), pale, 0, 0, -.7, { parent: M, recv: true });
+    this.m(new TorusGeo(R + .5, .8, 6, 22, Math.PI), pale, 0, 0, -.7, { parent: M, recv: true });
     for (const s of [-1, 1])
-      this.m(new BoxGeo(1.9, R + .5, 1.9), pale, s * (R + 1.4), (R + .5) / 2 - 1, -.7, { parent: M, recv: true });
-    /* Keystone with a cat's paw cut into it — the only man-made thing here. It
+      this.m(new BoxGeo(1.7, R + .5, 1.7), pale, s * (R + 1.3), (R + .5) / 2 - 1, -.7, { parent: M, recv: true });
+    /* Keystone with a cat's paw cut into it — the only worked stone here. It
        has to stand proud of the frame; flush with it, the frame swallows it. */
-    const key = R + 2.2;
-    this.m(new BoxGeo(3, 2, 2), stone, 0, key, -1.2, { parent: M });
+    const key = R + 1.9;
+    this.m(new BoxGeo(2.8, 1.8, 1.8), stone, 0, key, -1.1, { parent: M });
     const glyph = this.mat(0x7ce8e0, { emissive: new Col(0x7ce8e0), emissiveIntensity: 1.1 });
     for (let i = 0; i < 4; i++)
-      this.m(new SphGeo(.17, 8, 6), glyph, -.66 + i * .44, key + .52 + (i === 0 || i === 3 ? -.16 : .08), -.15,
+      this.m(new SphGeo(.16, 8, 6), glyph, -.6 + i * .4, key + .48 + (i === 0 || i === 3 ? -.14 : .07), -.1,
         { parent: M, cast: false });
-    this.m(new SphGeo(.34, 8, 6), glyph, 0, key - .32, -.15, { parent: M, cast: false });
+    this.m(new SphGeo(.3, 8, 6), glyph, 0, key - .3, -.1, { parent: M, cast: false });
 
-    /* boulders piled against the face, so the cliff is not one flat wall */
-    for (let i = 0; i < 7; i++) {
-      const s = 1.3 + hash2(i, 13) * 2.4;
-      const dx = (i % 2 ? 1 : -1) * (R + 2.4 + hash2(i, 5) * 6);
-      const dy = hash2(i, 9) * 8;
-      const b = this.m(new IcoGeo(s, 0), i % 2 ? stone : pale, dx, dy, -2.2 - hash2(i, 17) * 1.6,
+    /* a handful of boulders so the portal grows out of the crag instead of
+       being parked in front of it */
+    for (let i = 0; i < 6; i++) {
+      const s = 1.1 + hash2(i, 13) * 1.8;
+      const dx = (i % 2 ? 1 : -1) * (R + 2 + hash2(i, 5) * 3.4);
+      const b = this.m(new IcoGeo(s, 0), i % 2 ? stone : pale, dx, hash2(i, 9) * 4, -1.6 - hash2(i, 17) * 1.4,
         { parent: M, recv: true });
       b.rotation.set(hash2(i, 1) * 3, hash2(i, 2) * 6, hash2(i, 3) * 3);
+      const w = W(dx, -1.6);
+      this.addOccluder(w.x, ISLET_Y + 1, w.z, s * .8);
     }
 
     /* crystals leading you in, and the glow that spills out of the mouth */
     for (let i = 0; i < 4; i++) {
       const sd = i % 2 ? 1 : -1;
-      const dz = 2.6 + i * 3;
+      const dz = 2.6 + i * 2.8;
       const c = this.m(new OctGeo(.3, 0),
-        new StdMat({ color: 0x7ce8e0, emissive: new Col(0x7ce8e0), emissiveIntensity: 1.3, roughness: .2, flatShading: true }),
-        sd * (ENTRY_HALF + .5), 2.4, dz, { parent: M, cast: false });
+        new StdMat({ color: 0x7ce8e0, emissive: new Col(0x7ce8e0), emissiveIntensity: 1.2, roughness: .2, flatShading: true }),
+        sd * (ENTRY_HALF + .4), 2.2, dz, { parent: M, cast: false });
       c.scale.y = 1.5;
-      const w = W(sd * (ENTRY_HALF + .5), dz);
-      this.addLight(w.x, 2.4, w.z, 0x7ce8e0, 5, 16);
+      const w = W(sd * (ENTRY_HALF + .4), dz);
+      this.addLight(w.x, ISLET_Y + 2.2, w.z, 0x7ce8e0, 5, 16);
     }
-    this.addLight(CAVE_MOUTH.x, 2.4, CAVE_MOUTH.z, 0x7ce8e0, 7, 20);
+    this.addLight(CAVE_MOUTH.x, ISLET_Y + 2.4, CAVE_MOUTH.z, 0x7ce8e0, 7, 20);
     /* the glow reads as light spilling out of the tunnel, so it belongs inside
        it — parked at the threshold it just covered the opening */
-    M.add(this.glowSprite(0x7ce8e0, 2.4, new V3(0, 1.8, 5)));
+    M.add(this.glowSprite(0x7ce8e0, 2.2, new V3(0, 1.8, 5)));
 
     /* two braziers marking the threshold */
     for (const s of [-1, 1]) {
-      const bx = s * (R + 3.4), bz = -2.6;
-      this.m(new CylGeo(.5, .7, 1.5, 7), dark, bx, .75, bz, { parent: M, recv: true });
-      this.m(new CylGeo(.75, .5, .5, 7), pale, bx, 1.7, bz, { parent: M });
+      const bx = s * (R + 2.6), bz = -3.2;
+      this.m(new CylGeo(.45, .62, 1.4, 7), dark, bx, .7, bz, { parent: M, recv: true });
+      this.m(new CylGeo(.68, .45, .45, 7), pale, bx, 1.6, bz, { parent: M });
       const w = W(bx, bz);
-      this.makeFire(w.x, 2, w.z, .55, 0x7ce8e0);
+      this.makeFire(w.x, ISLET_Y + 1.9, w.z, .5, 0x7ce8e0);
     }
 
-    /* ---- finding it: a spur of trodden ground off the plaza road, and a
-       line of cairns with a lit shard on top. Enough of a trail to follow,
-       not so much that the place stops feeling like a find. ---- */
-    const spurTex = this.noiseTexture("#33302a", ["#2a2823", "#3d3931", "#37332c"], 160, 1);
-    spurTex.repeat.set(1, 6);
-    const spur = this.m(new PlaneGeo(3, 26), new StdMat({ map: spurTex, roughness: 1, transparent: true, opacity: .85 }),
-      0, .05, -15, { parent: M, rx: -Math.PI / 2, cast: false, recv: true });
-    spur.rotation.z = Math.PI;
-    for (let i = 0; i < 3; i++) {
-      const dz = -8 - i * 7, dx = (i % 2 ? 1 : -1) * 3.2;
-      const w = W(dx, dz);
-      const C = new Grp(); C.position.set(dx, 0, dz); M.add(C);
-      for (let k = 0; k < 3; k++)
-        this.m(new DodGeo(.55 - k * .13, 0), k % 2 ? stone : dark, (hash2(i, k) - .5) * .3, .35 + k * .55,
-          (hash2(i, k + 4) - .5) * .3, { parent: C, recv: true });
-      const shard = this.m(new OctGeo(.24, 0),
-        new StdMat({ color: 0x7ce8e0, emissive: new Col(0x7ce8e0), emissiveIntensity: 1.4, roughness: .2, flatShading: true }),
-        0, 2.1, 0, { parent: C, cast: false });
-      shard.scale.y = 1.6;
-      const src = this.addLight(w.x, 2.1, w.z, 0x7ce8e0, 3.5, 12);
-      this.anims.push(t => {
-        shard.rotation.y = t * .6;
-        src.intensity = 3 + Math.sin(t * 1.6 + i) * 1;
-      });
-    }
-
-    /* The name only fades in once you are close: the mouth should be spotted,
-       not signposted from the plaza. */
-    const lbl = this.makeLabel(state.lang === "es" ? "Cuevas de Cristal" : "Crystal Caves", "#7ce8e0", 1.5);
-    const lw = W(0, -6);
-    lbl.position.set(lw.x, 5.4, lw.z);
+    /* The name only fades in once you are on the islet: crossing the bridge is
+       the signpost, the mouth itself does not need one. */
+    const lbl = this.makeLabel(state.lang === "es" ? "Cuevas de Cristal" : "Crystal Caves", "#7ce8e0", 1.4);
+    const lw = W(0, -9);
+    lbl.position.set(lw.x, ISLET_Y + 10, lw.z);   // clear of the arch it names
     this.scene.add(lbl);
     this.nearLabels = this.nearLabels || [];
     this.nearLabels.push(lbl);
-
-    /* pines on the flanks, framing the mouth without hiding the approach */
-    for (let i = 0; i < 6; i++) {
-      const side = i % 2 ? 1 : -1;
-      const dz = -4 + Math.floor(i / 2) * 6.5;
-      const w = W(side * (11 + hash2(i, 4) * 4), dz);
-      if (Math.hypot(w.x, w.z) > 92) continue;
-      this.pine(w.x, w.z, .9 + hash2(i, 6) * .5);
-    }
   }
 
   /* ---- crossing between the island and the caverns ---- */
@@ -8528,7 +8676,7 @@ class Game {
         toast(state.lang === "es" ? "Cuevas de Cristal" : "Crystal Caves", 2000);
       } else {
         const p = entryAxis(.35);
-        b.position.set(p.x, 1.2, p.z);
+        b.position.set(p.x, ISLET_Y + 1.2, p.z);   // the mouth is up on the islet shelf
         this.heading = ENTRY_DIR + Math.PI;           // face back out to daylight
       }
       b.velocity.setZero();
@@ -9071,13 +9219,11 @@ class Game {
       const gate = CAVE_NODES.gate;
       if (pos.z > gate.z + gate.r - 2.5 && Math.abs(pos.x - gate.x) < 7) this.crossTo(false);
     } else {
-      const dOut = Math.hypot(pos.x, pos.z);
-      const limit = coastRadius(Math.atan2(pos.z, pos.x)) - 2;
-      if (dOut > limit) {
-        const k = limit / dOut;
-        pos.x *= k; pos.z *= k;
-        b.velocity.x *= .25; b.velocity.z *= .25;
-      }
+      /* the beach, the bridge deck and the islet are all walkable, so the old
+         single radial clamp against the coastline is not enough any more */
+      const px = pos.x, pz = pos.z;
+      confineOutdoors(pos);
+      if (pos.x !== px || pos.z !== pz) { b.velocity.x *= .25; b.velocity.z *= .25; }
       this.groundY = heightAt(pos.x, pos.z);
       /* the entrance corridor dims as you walk in, then carries you across */
       const ep = entryProgress(pos.x, pos.z);
