@@ -25,6 +25,8 @@
   @keyframes pop{0%{transform:scale(.9);opacity:0}100%{transform:scale(1);opacity:1}}
 
   #scene{position:fixed;inset:0;z-index:0}
+  #fade{position:fixed;inset:0;z-index:65;background:#05050a;opacity:0;pointer-events:none;transition:opacity .26s ease}
+  #fade.on{opacity:1}
 
   /* top HUD */
   #hud{position:fixed;top:0;left:0;right:0;z-index:20;display:flex;align-items:flex-start;justify-content:space-between;
@@ -207,12 +209,34 @@
   #mm .done b{display:block;font-size:18px;margin-bottom:6px}
   #mm .done p{margin:0;font-size:14px;line-height:1.6;color:var(--dim)}
 
+  /* ---- cave arcade cabinet ---- */
+  #arc .box{position:relative;width:min(660px,100%);max-height:94vh;overflow:auto;border:1px solid var(--line2);
+    background:var(--panel);border-radius:8px;animation:floatUp .25s ease both}
+  #arc .inner{padding:clamp(18px,3vw,28px)}
+  #arc .num{font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:.2em;text-transform:uppercase}
+  #arc h2{margin:8px 0 0;font-size:clamp(20px,2.8vw,28px);font-weight:700;letter-spacing:-.02em}
+  #arc .hint{margin:8px 0 0;font-size:13px;line-height:1.6;color:var(--mut)}
+  #arc .screen{margin-top:16px;position:relative;border:1px solid #26262e;border-radius:6px;overflow:hidden;background:#07070b}
+  #arc canvas{display:block;width:100%;height:auto;image-rendering:pixelated}
+  #arc .scores{display:flex;gap:18px;align-items:center;margin-top:14px;
+    font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--mut)}
+  #arc .scores b{color:var(--ink);font-size:17px}
+  #arc .scores .best b{color:var(--gold)}
+  #arc .acts{display:flex;gap:10px;margin-top:16px;flex-wrap:wrap}
+  /* the overlay that covers the canvas before a run and after a game over */
+  #arc .curtain{position:absolute;inset:0;display:grid;place-items:center;text-align:center;
+    background:#07070bd9;backdrop-filter:blur(2px);padding:20px}
+  #arc .curtain.gone{display:none}
+  #arc .curtain b{display:block;font-size:20px;margin-bottom:6px}
+  #arc .curtain span{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--dim);line-height:1.7}
+
   @media(max-width:640px){ #info .tl{grid-template-columns:1fr;gap:6px} #legend{font-size:10px;gap:10px} .brand .role{display:none}
     #mm .slot{width:28px;height:28px} #mm .pick{width:40px;height:40px} }
 </style>
 </head>
 <body data-lang="es">
   <div id="scene"></div>
+  <div id="fade"></div>
 
   <div id="hud">
     <div class="brand">
@@ -291,6 +315,26 @@
         </div>
       </div>
     </div>
+  </div>
+
+  <div id="arc" class="ov">
+    <div class="box"><div class="inner">
+      <div class="num" id="arcKicker"></div>
+      <h2 id="arcTitle"></h2>
+      <p class="hint" id="arcHint"></p>
+      <div class="screen">
+        <canvas id="arcCanvas" width="480" height="330"></canvas>
+        <div class="curtain" id="arcCurtain"><div><b id="arcCurtainT"></b><span id="arcCurtainB"></span></div></div>
+      </div>
+      <div class="scores">
+        <span id="arcScoreL"></span>
+        <span class="best" id="arcBestL"></span>
+      </div>
+      <div class="acts">
+        <button class="btn primary" id="arcStart"></button>
+        <button class="btn ghost" id="arcClose"></button>
+      </div>
+    </div></div>
   </div>
 
   <div id="mm" class="ov">
@@ -4212,10 +4256,10 @@ const I18N = {
     promptK: "lugar sagrado", promptO: "pulsa E o clic para entrar",
     introKick: "La Isla del Gato · portfolio jugable",
     introTitle: "Hago que las cosas se muevan.",
-    introBody: "Una isla, ocho templos y un gato con curriculum. Explora, salta, tira cajas, sube a la colina del tiempo, roba los peces dorados y entra en cada templo para descubrir quién es Raúl.",
+    introBody: "Una isla, ocho templos y un gato con curriculum. Explora, salta, tira cajas, sube a la colina del tiempo, roba los peces dorados, baja a la cueva de cristal a jugar y entra en cada templo para descubrir quién es Raúl.",
     miniDrive: "WASD / flechas para mover al gato",
     miniOpen: "E dentro de un templo", miniFish: "🐟 12 peces escondidos",
-    miniHonk: "🎮 minijuego en las Ruinas",
+    miniHonk: "🕹 4 minijuegos en la cueva",
     startBtn: "▶ Entrar en la isla", loading: "Levantando la isla…",
     toastReset: "Gato de vuelta a la plaza", toastHonk: "¡Miau!",
     close: "Cerrar", viewRepo: "Ver repositorio",
@@ -4241,10 +4285,10 @@ const I18N = {
     promptK: "sacred place", promptO: "press E or click to enter",
     introKick: "Cat Island · playable portfolio",
     introTitle: "I make things move.",
-    introBody: "One island, eight temples and a cat with a résumé. Explore, jump, knock crates over, climb the hill of time, steal the golden fish and enter each temple to find out who Raúl is.",
+    introBody: "One island, eight temples and a cat with a résumé. Explore, jump, knock crates over, climb the hill of time, steal the golden fish, drop into the crystal cave for a game and enter each temple to find out who Raúl is.",
     miniDrive: "WASD / arrows to move the cat",
     miniOpen: "E inside a temple", miniFish: "🐟 12 hidden fish",
-    miniHonk: "🎮 minigame in the Ruins",
+    miniHonk: "🕹 4 minigames in the cave",
     startBtn: "▶ Enter the island", loading: "Raising the island…",
     toastReset: "Cat back at the plaza", toastHonk: "Meow!",
     close: "Close", viewRepo: "View repository",
@@ -4362,7 +4406,7 @@ const $  = s => document.querySelector(s);
 const $$ = s => Array.from(document.querySelectorAll(s));
 const state = { lang: "es", activeProject: null, near: null, infoSection: null,
                 fish: 0, fishTotal: 12, zonesFound: 0,
-                minigame: false, mmSolved: false };
+                minigame: false, mmSolved: false, inCave: false };
 const L = v => (v && typeof v === "object" && !Array.isArray(v)) ? (v[state.lang] ?? v.es) : v;
 const TXT = () => I18N[state.lang];
 const IS_TOUCH = matchMedia("(pointer:coarse)").matches || "ontouchstart" in window;
@@ -4539,7 +4583,19 @@ function interact() {
   if (!state.near || state.activeProject != null) return;
   const m = state.near.meta;
   if (m.kind === "project") openProject(m.idx);
-  else renderInfoSection(m.section);
+  else if (m.kind === "section") renderInfoSection(m.section);
+  else if (m.kind === "arcade") Arc.open(m.game);
+  else if (m.kind === "mm") mmOpen();
+  else if (m.kind === "cave" && game) game.enterCave();
+  else if (m.kind === "exit" && game) game.exitCave();
+}
+
+/* black-out wrapper so teleporting between the island and the cave is a cut,
+   not a jarring jump */
+function fadeThrough(fn) {
+  const el = $("#fade");
+  el.classList.add("on");
+  setTimeout(() => { fn(); setTimeout(() => el.classList.remove("on"), 90); }, 260);
 }
 
 /* ---------- input ---------- */
@@ -5200,6 +5256,385 @@ function tryOpenMinigame() {
 
 
 /* ============================================================
+   ARCADE — the cave under the island holds a handful of small
+   games. They all share one 2D canvas, one loop and one score
+   panel; a game only has to provide reset/update/draw/key, so
+   adding another is a few dozen lines.
+   ============================================================ */
+const AW = 480, AH = 330;                       // logical canvas size
+
+const ARC_TXT = {
+  es: { kicker: "Cueva de Cristal · arcade", start: "Empezar", again: "Otra vez",
+        close: "Salir", score: "puntos", best: "récord",
+        ready: "¿Listo?", over: "Fin de la partida",
+        readyB: "Pulsa Empezar o Espacio", overB: n => `Has hecho ${n} puntos. Espacio para reintentar.`,
+        newBest: n => `¡Récord nuevo: ${n}!` },
+  en: { kicker: "Crystal Cave · arcade", start: "Start", again: "Again",
+        close: "Leave", score: "score", best: "best",
+        ready: "Ready?", over: "Game over",
+        readyB: "Hit Start or Space", overB: n => `You scored ${n}. Space to try again.`,
+        newBest: n => `New best: ${n}!` }
+};
+const AT = () => ARC_TXT[state.lang];
+
+/* ---------- tiny drawing helpers ---------- */
+function arcText(g, s, x, y, size = 12, col = "#ecebe8", align = "left") {
+  g.font = `700 ${size}px "JetBrains Mono", monospace`;
+  g.textAlign = align; g.textBaseline = "middle";
+  g.fillStyle = col;
+  g.fillText(s, x, y);
+}
+
+/* ============================================================
+   1 · PONG — beat the machine to 7
+   ============================================================ */
+const GAME_PONG = {
+  id: "pong", color: "#7ce8e0",
+  name: { es: "Pong del Sótano", en: "Basement Pong" },
+  hint: { es: "Mueve la pala con W/S o las flechas. Primero a 7 gana. La máquina lleva décadas practicando.",
+          en: "Move your paddle with W/S or the arrows. First to 7 wins. The machine has been practising for decades." },
+  reset() {
+    this.p1 = AH / 2; this.p2 = AH / 2; this.s1 = 0; this.s2 = 0;
+    this.serve(1);
+  },
+  serve(dir) {
+    this.bx = AW / 2; this.by = AH / 2;
+    this.vx = 190 * dir; this.vy = (Math.random() * 2 - 1) * 130;
+    this.wait = .7;
+  },
+  update(dt, keys) {
+    const sp = 260;
+    if (keys.up) this.p1 -= sp * dt;
+    if (keys.down) this.p1 += sp * dt;
+    this.p1 = Math.max(32, Math.min(AH - 32, this.p1));
+
+    /* the AI leads the ball but is deliberately a touch late */
+    const target = this.vx > 0 ? this.by : AH / 2;
+    this.p2 += Math.max(-215 * dt, Math.min(215 * dt, target - this.p2));
+    this.p2 = Math.max(32, Math.min(AH - 32, this.p2));
+
+    if (this.wait > 0) { this.wait -= dt; return; }
+    this.bx += this.vx * dt; this.by += this.vy * dt;
+    if (this.by < 8) { this.by = 8; this.vy = Math.abs(this.vy); }
+    if (this.by > AH - 8) { this.by = AH - 8; this.vy = -Math.abs(this.vy); }
+
+    const hit = (px, py) => Math.abs(this.by - py) < 34;
+    if (this.vx < 0 && this.bx < 30 && this.bx > 18) {
+      if (hit(24, this.p1)) {
+        this.vx = Math.abs(this.vx) * 1.06;
+        this.vy += (this.by - this.p1) * 3.4;
+        Snd.blip(560, .05, "square", .05);
+      }
+    }
+    if (this.vx > 0 && this.bx > AW - 30 && this.bx < AW - 18) {
+      if (hit(AW - 24, this.p2)) {
+        this.vx = -Math.abs(this.vx) * 1.06;
+        this.vy += (this.by - this.p2) * 3.4;
+        Snd.blip(440, .05, "square", .05);
+      }
+    }
+    this.vy = Math.max(-300, Math.min(300, this.vy));
+
+    if (this.bx < 0) { this.s2++; Snd.deny(); this.serve(1); }
+    if (this.bx > AW) { this.s1++; Snd.blip(880, .12, "triangle", .07); this.serve(-1); }
+
+    if (this.s1 >= 7 || this.s2 >= 7) return { over: true, score: this.s1 * 10 };
+  },
+  draw(g) {
+    g.fillStyle = "#07070b"; g.fillRect(0, 0, AW, AH);
+    g.strokeStyle = "#1e2a33"; g.setLineDash([6, 8]); g.lineWidth = 2;
+    g.beginPath(); g.moveTo(AW / 2, 0); g.lineTo(AW / 2, AH); g.stroke(); g.setLineDash([]);
+    g.fillStyle = "#7ce8e0"; g.fillRect(18, this.p1 - 32, 6, 64);
+    g.fillStyle = "#f2a2c4"; g.fillRect(AW - 24, this.p2 - 32, 6, 64);
+    g.fillStyle = "#ecebe8"; g.fillRect(this.bx - 4, this.by - 4, 8, 8);
+    arcText(g, this.s1, AW / 2 - 40, 30, 26, "#7ce8e0", "right");
+    arcText(g, this.s2, AW / 2 + 40, 30, 26, "#f2a2c4", "left");
+  }
+};
+
+/* ============================================================
+   2 · SNAKE — the cat chasing golden fish
+   ============================================================ */
+const GAME_SNAKE = {
+  id: "snake", color: "#ffd76a",
+  name: { es: "El Gato Glotón", en: "The Greedy Cat" },
+  hint: { es: "Dirige al gato con WASD o las flechas y cómete los peces. Chocar contigo mismo acaba la partida.",
+          en: "Steer the cat with WASD or the arrows and eat the fish. Hitting yourself ends the run." },
+  CELL: 15,
+  reset() {
+    this.cols = Math.floor(AW / this.CELL); this.rows = Math.floor(AH / this.CELL);
+    this.body = [{ x: 6, y: 8 }, { x: 5, y: 8 }, { x: 4, y: 8 }];
+    this.dir = { x: 1, y: 0 }; this.next = { x: 1, y: 0 };
+    this.acc = 0; this.rate = .14; this.score = 0;
+    this.dropFish();
+  },
+  dropFish() {
+    let x, y, tries = 0;
+    do { x = Math.floor(Math.random() * this.cols); y = Math.floor(Math.random() * this.rows); tries++; }
+    while (tries < 200 && this.body.some(b => b.x === x && b.y === y));
+    this.fish = { x, y };
+  },
+  key(k) {
+    const d = this.dir;
+    if ((k === "up") && d.y === 0) this.next = { x: 0, y: -1 };
+    if ((k === "down") && d.y === 0) this.next = { x: 0, y: 1 };
+    if ((k === "left") && d.x === 0) this.next = { x: -1, y: 0 };
+    if ((k === "right") && d.x === 0) this.next = { x: 1, y: 0 };
+  },
+  update(dt) {
+    this.acc += dt;
+    if (this.acc < this.rate) return;
+    this.acc = 0;
+    this.dir = this.next;
+    const head = { x: this.body[0].x + this.dir.x, y: this.body[0].y + this.dir.y };
+    /* walls wrap — losing to a wall you cannot see is not fun */
+    head.x = (head.x + this.cols) % this.cols;
+    head.y = (head.y + this.rows) % this.rows;
+    if (this.body.some(b => b.x === head.x && b.y === head.y)) {
+      Snd.deny();
+      return { over: true, score: this.score };
+    }
+    this.body.unshift(head);
+    if (head.x === this.fish.x && head.y === this.fish.y) {
+      this.score += 10;
+      this.rate = Math.max(.06, this.rate * .97);
+      Snd.pickup(Math.min(11, this.score / 10));
+      this.dropFish();
+    } else this.body.pop();
+  },
+  draw(g) {
+    const C = this.CELL;
+    g.fillStyle = "#07070b"; g.fillRect(0, 0, AW, AH);
+    g.strokeStyle = "#12121a"; g.lineWidth = 1;
+    for (let x = 0; x <= this.cols; x++) { g.beginPath(); g.moveTo(x * C, 0); g.lineTo(x * C, this.rows * C); g.stroke(); }
+    for (let y = 0; y <= this.rows; y++) { g.beginPath(); g.moveTo(0, y * C); g.lineTo(this.cols * C, y * C); g.stroke(); }
+    g.fillStyle = "#ffd76a";
+    g.fillRect(this.fish.x * C + 3, this.fish.y * C + 4, C - 6, C - 8);
+    this.body.forEach((b, i) => {
+      g.fillStyle = i === 0 ? "#f5e6cc" : (i % 2 ? "#b5652a" : "#e08840");
+      g.fillRect(b.x * C + 1, b.y * C + 1, C - 2, C - 2);
+    });
+    arcText(g, this.score, 10, 16, 14, "#ffd76a");
+  }
+};
+
+/* ============================================================
+   3 · SIMON — repeat what the runes chant
+   ============================================================ */
+const GAME_RUNES = {
+  id: "runes", color: "#f2a2c4",
+  name: { es: "Las Runas Cantoras", en: "The Singing Runes" },
+  hint: { es: "Mira la secuencia y repítela con las teclas 1-4 o haciendo clic. Cada ronda añade una runa más.",
+          en: "Watch the sequence and repeat it with keys 1-4 or by clicking. Every round adds one more rune." },
+  PADS: [
+    { col: "#7fdca8", lit: "#c9f5de", note: 64 },
+    { col: "#e8b06a", lit: "#f7ddb8", note: 67 },
+    { col: "#8fb0ff", lit: "#cddcff", note: 71 },
+    { col: "#f07a6a", lit: "#f9c3ba", note: 76 }
+  ],
+  reset() {
+    this.seq = []; this.step = 0; this.score = 0;
+    this.mode = "show"; this.timer = .6; this.showIdx = -1; this.flash = -1;
+    this.addStep();
+  },
+  addStep() {
+    this.seq.push(Math.floor(Math.random() * 4));
+    this.mode = "show"; this.showIdx = -1; this.timer = .5; this.step = 0;
+  },
+  padAt(i) {
+    const w = AW / 2 - 24, h = AH / 2 - 30;
+    return { x: 16 + (i % 2) * (w + 16), y: 40 + Math.floor(i / 2) * (h + 12), w, h };
+  },
+  key(k) {
+    const n = "1234".indexOf(k);
+    if (n >= 0) this.press(n);
+  },
+  click(mx, my) {
+    for (let i = 0; i < 4; i++) {
+      const p = this.padAt(i);
+      if (mx >= p.x && mx <= p.x + p.w && my >= p.y && my <= p.y + p.h) return this.press(i);
+    }
+  },
+  press(n) {
+    if (this.mode !== "input") return;
+    this.flash = n; this.flashT = .18;
+    Snd.blip(Snd.mtof(this.PADS[n].note), .18, "triangle", .09);
+    if (this.seq[this.step] !== n) { this.mode = "dead"; Snd.deny(); return; }
+    this.step++;
+    if (this.step >= this.seq.length) {
+      this.score = this.seq.length * 10;
+      this.mode = "wait"; this.timer = .5;
+    }
+  },
+  update(dt) {
+    if (this.flashT > 0) { this.flashT -= dt; if (this.flashT <= 0) this.flash = -1; }
+    this.timer -= dt;
+    if (this.mode === "dead") return { over: true, score: this.score };
+    if (this.mode === "show" && this.timer <= 0) {
+      this.showIdx++;
+      if (this.showIdx >= this.seq.length) { this.mode = "input"; this.flash = -1; }
+      else {
+        this.flash = this.seq[this.showIdx]; this.flashT = .32;
+        Snd.blip(Snd.mtof(this.PADS[this.flash].note), .3, "sine", .1);
+        this.timer = .52;
+      }
+    }
+    if (this.mode === "wait" && this.timer <= 0) this.addStep();
+  },
+  draw(g) {
+    g.fillStyle = "#07070b"; g.fillRect(0, 0, AW, AH);
+    for (let i = 0; i < 4; i++) {
+      const p = this.padAt(i), on = this.flash === i;
+      g.fillStyle = on ? this.PADS[i].lit : this.PADS[i].col;
+      g.globalAlpha = on ? 1 : .32;
+      g.fillRect(p.x, p.y, p.w, p.h);
+      g.globalAlpha = 1;
+      g.strokeStyle = this.PADS[i].col; g.lineWidth = 2;
+      g.strokeRect(p.x, p.y, p.w, p.h);
+      arcText(g, i + 1, p.x + p.w / 2, p.y + p.h / 2, 22, on ? "#07070b" : this.PADS[i].col, "center");
+    }
+    const label = this.mode === "show"
+      ? (state.lang === "es" ? "mira…" : "watch…")
+      : (state.lang === "es" ? "¡repite!" : "repeat!");
+    arcText(g, label, AW / 2, 20, 13, "#b6b3ac", "center");
+    arcText(g, (state.lang === "es" ? "ronda " : "round ") + this.seq.length, AW - 10, 20, 13, "#ffd76a", "right");
+  }
+};
+
+const ARCADE_GAMES = [GAME_PONG, GAME_SNAKE, GAME_RUNES];
+
+/* ============================================================
+   shared shell: loop, scores, curtain
+   ============================================================ */
+const Arc = {
+  game: null, running: false, raf: 0, last: 0, score: 0, keys: {},
+
+  best(id) {
+    try { return +(localStorage.getItem("rja_best_" + id) || 0); } catch { return 0; }
+  },
+  setBest(id, v) {
+    try { localStorage.setItem("rja_best_" + id, String(v)); } catch { }
+  },
+
+  open(id) {
+    const gm = ARCADE_GAMES.find(g => g.id === id);
+    if (!gm) return;
+    Snd.begin();
+    this.game = gm;
+    state.minigame = true;
+    const t = AT();
+    $("#arcKicker").textContent = t.kicker;
+    $("#arcKicker").style.color = gm.color;
+    $("#arcTitle").textContent = L(gm.name);
+    $("#arcHint").textContent = L(gm.hint);
+    $("#arcClose").textContent = t.close;
+    $("#arc").classList.add("show");
+    Snd.duck(true); Snd.ui(true);
+    this.showCurtain(t.ready, t.readyB, t.start);
+    this.score = 0;
+    /* seed the board before the first paint, otherwise draw() renders
+       undefined state behind the curtain */
+    gm.reset();
+    this.paint();
+    this.updateScores();
+  },
+  close() {
+    this.stop();
+    this.game = null;
+    state.minigame = false;
+    $("#arc").classList.remove("show");
+    Snd.duck(false); Snd.ui(false);
+  },
+
+  showCurtain(title, body, btn) {
+    $("#arcCurtain").classList.remove("gone");
+    $("#arcCurtainT").textContent = title;
+    $("#arcCurtainB").textContent = body;
+    $("#arcStart").textContent = btn;
+    $("#arcStart").style.display = "";
+  },
+  hideCurtain() {
+    $("#arcCurtain").classList.add("gone");
+    $("#arcStart").style.display = "none";
+  },
+
+  start() {
+    if (!this.game) return;
+    this.keys = {};
+    this.game.reset();
+    this.score = 0;
+    this.updateScores();
+    this.hideCurtain();
+    this.running = true;
+    this.last = 0;
+    cancelAnimationFrame(this.raf);
+    const step = ts => {
+      if (!this.running) return;
+      const now = ts / 1000;
+      const dt = this.last ? Math.min(.05, now - this.last) : 1 / 60;
+      this.last = now;
+      const res = this.game.update(dt, this.keys);
+      this.paint();
+      if (res && res.over) return this.gameOver(res.score);
+      this.raf = requestAnimationFrame(step);
+    };
+    this.raf = requestAnimationFrame(step);
+  },
+  stop() { this.running = false; cancelAnimationFrame(this.raf); },
+
+  gameOver(score) {
+    this.stop();
+    this.score = score | 0;
+    const t = AT();
+    const prev = this.best(this.game.id);
+    let msg = t.overB(this.score);
+    if (this.score > prev) { this.setBest(this.game.id, this.score); msg = t.newBest(this.score); Snd.fanfare(); }
+    this.updateScores();
+    this.showCurtain(t.over, msg, t.again);
+  },
+
+  updateScores() {
+    const t = AT();
+    const live = this.running && this.game && this.game.score != null ? this.game.score : this.score;
+    $("#arcScoreL").innerHTML = `${t.score} <b>${live | 0}</b>`;
+    $("#arcBestL").innerHTML = `${t.best} <b>${this.game ? this.best(this.game.id) : 0}</b>`;
+  },
+
+  paint() {
+    const cv = $("#arcCanvas"), g = cv.getContext("2d");
+    if (this.game) this.game.draw(g);
+    this.updateScores();
+  }
+};
+
+$("#arcStart").addEventListener("click", () => Arc.start());
+$("#arcClose").addEventListener("click", () => Arc.close());
+$("#arc").addEventListener("click", e => { if (e.target.id === "arc") Arc.close(); });
+$("#arcCanvas").addEventListener("click", e => {
+  if (!Arc.game || !Arc.running || !Arc.game.click) return;
+  const r = e.target.getBoundingClientRect();
+  Arc.game.click((e.clientX - r.left) * AW / r.width, (e.clientY - r.top) * AH / r.height);
+});
+
+/* arcade input: swallowed before the cat ever sees it */
+const ARC_MAP = { arrowup: "up", w: "up", arrowdown: "down", s: "down",
+                  arrowleft: "left", a: "left", arrowright: "right", d: "right" };
+addEventListener("keydown", e => {
+  if (!Arc.game || !$("#arc").classList.contains("show")) return;
+  const k = e.key.toLowerCase();
+  if (k === "escape") { Arc.close(); return; }
+  if (k === " " || k === "enter") { e.preventDefault(); if (!Arc.running) Arc.start(); return; }
+  const dir = ARC_MAP[k];
+  if (dir) { e.preventDefault(); Arc.keys[dir] = true; if (Arc.game.key) Arc.game.key(dir); }
+  else if (Arc.game.key) Arc.game.key(k);
+});
+addEventListener("keyup", e => {
+  const dir = ARC_MAP[e.key.toLowerCase()];
+  if (dir) Arc.keys[dir] = false;
+});
+
+
+/* ============================================================
    GAME — world, physics, island
    ============================================================ */
 let game = null;
@@ -5263,6 +5698,7 @@ const FLAT_DISCS = [
   { x: -20, z: 12, r: 10, fade: 7 },    // pond
   { x: 0, z: -17, r: 9, fade: 7 },      // RAUL letters
   { x: -8, z: 20, r: 7, fade: 6 },      // seesaw
+  { x: 34, z: 24, r: 9, fade: 7 },      // cave mouth
   { x: 24, z: -2, r: 8, fade: 6 },      // ramp
   { x: -26, z: 2, r: 8, fade: 6 },      // ramp
   ...ZONE_POS.map(p => ({ x: p.x, z: p.z, r: p.r + 3, fade: 8 }))
@@ -5322,6 +5758,13 @@ function heightAt(x, z) {
   return h;
 }
 
+/* The cavern sits far out in XZ instead of underground: the physics floor is a
+   single infinite plane at y=0 and burrowing beneath it would mean fighting it
+   every frame. Out here it reuses that same floor and the island is far past
+   the fog, so the two never see each other. */
+const CAVE = { x: 0, z: 4000 };
+const CAVE_MOUTH = { x: 34, z: 24 };
+
 class Game {
   constructor(host) {
     this.host = host;
@@ -5336,7 +5779,9 @@ class Game {
     host.appendChild(this.renderer.domElement);
 
     this.scene = new Scene3();
-    this.scene.background = this.skyTexture();
+    this.sky = this.skyTexture();
+    this.scene.background = this.sky;
+    this.outdoorOnly = [];      // things that must vanish underground
     this.scene.fog = new Fog3(0x2a3c58, 90, 430);
 
     this.camera = new PerspCam(60, innerWidth / innerHeight, .1, 2400);
@@ -5358,7 +5803,8 @@ class Game {
        the light pool below instead of being its own PointLight. */
     this.sunDir = new V3(90, 95, -160).normalize();
 
-    this.scene.add(new HemiLight(0x7fa2dc, 0x3d4632, 1));
+    this.hemi = new HemiLight(0x7fa2dc, 0x3d4632, 1);
+    this.scene.add(this.hemi);
 
     const sun = new DirLight(0xffc490, 2.5);
     sun.castShadow = true;
@@ -5384,6 +5830,20 @@ class Game {
     const seaBounce = new DirLight(0x3d5f8a, .3);
     seaBounce.position.set(10, -40, 30);
     this.scene.add(seaBounce);
+    this.outdoorLights = [fill, seaBounce];
+
+    /* The cave needs its own key light. Routing it through the point-light
+       pool did not work: the nine crystals are always nearer the camera, so
+       they took every slot and the middle of the chamber stayed black. A
+       dedicated directional light is position-independent and always on. */
+    this.caveKey = new DirLight(0xa8c6f0, 1.5);
+    this.caveKey.position.set(30, 70, -20);
+    this.caveKey.visible = false;
+    this.scene.add(this.caveKey);
+    this.caveFill = new DirLight(0x6a5a86, .55);
+    this.caveFill.position.set(-40, 20, 35);
+    this.caveFill.visible = false;
+    this.scene.add(this.caveFill);
 
     /* physics */
     this.world = new CWorld({ gravity: new CVec(0, -24, 0) });
@@ -5400,6 +5860,7 @@ class Game {
     this.zones = [];         // interactive temple zones
     this.anims = [];         // fn(t, dt) called each frame
     this.fishes = [];        // collectibles
+    this.caveSpots = []; this.surfaceSpots = [];
     this.lightSources = [];  // every lamp/fire/crystal, lit through the pool
     this.lightPool = [];
     this.labels = [];        // floating temple names, faded by distance
@@ -5413,7 +5874,9 @@ class Game {
     this.buildSky();
     this.buildTemples();
     this.buildFish();
+    this.buildCave();
     this.buildCat();
+    this.caveGrp.visible = false;
     this.initLightPool(IS_TOUCH ? 4 : 8);
     this._bind();
     this.loop = this.loop.bind(this);
@@ -5732,6 +6195,7 @@ class Game {
     island.castShadow = true;
     this.scene.add(island);
     this.island = island;
+    this.outdoorOnly.push(island, water, sunLane);
 
     /* ---- surf line hugging the irregular coast ---- */
     const foamGeo = new BufGeo();
@@ -5754,6 +6218,7 @@ class Game {
     const foam = new Mesh(foamGeo, this.bmat(0xdff0f4, {
       transparent: true, opacity: .16, side: SIDE_DOUBLE, depthWrite: false }));
     this.scene.add(foam);
+    this.outdoorOnly.push(foam);
     this.anims.push(t => { foam.material.opacity = .12 + Math.sin(t * 1.2) * .06; });
 
     /* ---- dirt paths from plaza to each temple ---- */
@@ -5819,6 +6284,7 @@ class Game {
         g.position.set(Math.cos(a) * d, -8, Math.sin(a) * d);
         g.lookAt(0, hh * .3, 0);
         this.scene.add(g);
+        this.outdoorOnly.push(g);
         /* two overlapping peaks per slot so the ridgeline is not a row of cones */
         for (let k = 0; k < 2; k++) {
           const s = k ? .68 : 1;
@@ -6132,11 +6598,15 @@ class Game {
       sarr[i * 3 + 2] = Math.sin(a) * Math.cos(e) * R;
     }
     starGeo.setAttribute("position", new F32Attr(sarr, 3));
-    this.scene.add(new Points3(starGeo, new PointsMat({ color: 0xcfe0ff, size: .8, transparent: true, opacity: .75, depthWrite: false })));
+    const stars = new Points3(starGeo, new PointsMat({ color: 0xcfe0ff, size: .8, transparent: true, opacity: .75, depthWrite: false }));
+    this.scene.add(stars);
+    this.outdoorOnly.push(stars);
 
     /* sun glow on horizon */
-    this.scene.add(this.glowSprite(0xd8a878, 78, new V3(90, 62, -160)));
-    this.scene.add(this.glowSprite(0xc98a55, 34, new V3(90, 54, -160)));
+    const sunA = this.glowSprite(0xd8a878, 78, new V3(90, 62, -160));
+    const sunB = this.glowSprite(0xc98a55, 34, new V3(90, 54, -160));
+    this.scene.add(sunA, sunB);
+    this.outdoorOnly.push(sunA, sunB);
 
     /* fireflies */
     const count = REDUCED ? 0 : (IS_TOUCH ? 50 : 130);
@@ -6177,6 +6647,7 @@ class Game {
       g.scale.y = .55;
       g.position.set((Math.random() - .5) * 260, 42 + Math.random() * 26, (Math.random() - .5) * 260);
       this.scene.add(g);
+      this.outdoorOnly.push(g);
       this.clouds.push({ g, spd: .8 + Math.random() * 1.4 });
     }
     this.anims.push((t, dt) => {
@@ -6187,7 +6658,7 @@ class Game {
     });
 
     /* hot-air balloon with OPEN TO WORK banner */
-    const bal = new Grp(); this.scene.add(bal);
+    const bal = new Grp(); this.scene.add(bal); this.outdoorOnly.push(bal);
     const stripes = this.makeCanvas(128, 128, g => {
       const cols = ["#e8b06a", "#f07a6a", "#7fdca8", "#8fb0ff"];
       for (let i = 0; i < 8; i++) { g.fillStyle = cols[i % 4]; g.fillRect(i * 16, 0, 16, 128); }
@@ -6205,7 +6676,7 @@ class Game {
     /* birds circling */
     this.birds = [];
     for (let i = 0; i < (IS_TOUCH ? 3 : 5); i++) {
-      const g = new Grp(); this.scene.add(g);
+      const g = new Grp(); this.scene.add(g); this.outdoorOnly.push(g);
       const bodyM = this.mat(0x2c2a38, { flatShading: true });
       this.m(new ConeGeo(.18, .8, 4), bodyM, 0, 0, 0, { parent: g, rx: Math.PI / 2, cast: false });
       const w1 = this.m(new PlaneGeo(1, .34), this.bmat(0x2c2a38, { side: SIDE_DOUBLE }), -.5, 0, 0, { parent: g, cast: false });
@@ -7149,6 +7620,296 @@ class Game {
     });
   }
 
+  /* ============ the cave ============
+     The cavern lives far away in XZ rather than under the island: the physics
+     floor is a single infinite plane at y=0, so digging downwards would mean
+     fighting it. Parking the cave at CAVE_Z lets it reuse that same floor, and
+     entering is a teleport plus a fog/sky swap. The island is far outside the
+     fog range from there, so it costs nothing to leave standing. */
+  buildCave() {
+    const CX = CAVE.x, CZ = CAVE.z, R = 46;
+    const rock = this.mat(0x554d63, { roughness: 1, flatShading: true });
+    const rockDark = this.mat(0x3a3346, { roughness: 1, flatShading: true });
+
+    const G = new Grp(); G.position.set(CX, 0, CZ); this.scene.add(G);
+    this.caveGrp = G;
+
+    /* floor, uneven enough not to read as a disc */
+    const fgeo = new CircleGeo(R + 4, 64);
+    const fpos = fgeo.attributes.position;
+    for (let i = 0; i < fpos.count; i++) {
+      const x = fpos.getX(i), y = fpos.getY(i);
+      const d = Math.hypot(x, y);
+      fpos.setZ(i, d < 6 ? 0 : -Math.min(.9, (fbm(x * .06 + 3, y * .06 - 2, 2) - .5) * 2.2));
+    }
+    fgeo.computeVertexNormals();
+    const floor = new Mesh(fgeo, rock);
+    floor.rotation.x = -Math.PI / 2; floor.receiveShadow = true;
+    G.add(floor);
+
+    /* walls + domed ceiling, seen from the inside */
+    const wall = new Mesh(new CylGeo(R, R, 30, 40, 1, true),
+      this.mat(0x453d52, { roughness: 1, flatShading: true, side: SIDE_BACK }));
+    wall.position.y = 15; G.add(wall);
+    const dome = new Mesh(new SphGeo(R, 40, 16, 0, Math.PI * 2, 0, Math.PI / 2),
+      this.mat(0x352e40, { roughness: 1, flatShading: true, side: SIDE_BACK }));
+    dome.position.y = 29; dome.scale.y = .5; G.add(dome);
+
+    /* physical wall ring */
+    for (let i = 0; i < 26; i++) {
+      const a = i / 26 * Math.PI * 2;
+      this.sbox(2 * Math.PI * R / 26 * 1.4, 20, 3, CX + Math.cos(a) * (R + .5), 10, CZ + Math.sin(a) * (R + .5), -a + Math.PI / 2);
+    }
+
+    /* stalagmites and stalactites */
+    for (let i = 0; i < 34; i++) {
+      const a = Math.random() * 6.28, r = 12 + Math.random() * (R - 15);
+      const x = Math.cos(a) * r, z = Math.sin(a) * r;
+      if (Math.hypot(x, z) < 13) continue;
+      const h = 2 + Math.random() * 6;
+      this.m(new ConeGeo(.5 + Math.random() * 1.1, h, 6), i % 3 ? rock : rockDark, x, h / 2 - .4, z, { parent: G, recv: true });
+      if (i % 2) {
+        const h2 = 2 + Math.random() * 7;
+        this.m(new ConeGeo(.4 + Math.random() * .9, h2, 6), rockDark,
+          x + (Math.random() - .5) * 6, 26 - h2 / 2, z + (Math.random() - .5) * 6, { parent: G, rx: Math.PI, cast: false });
+      }
+    }
+
+    /* glowing crystal clusters — the only real light down here */
+    const crystalCols = [0x7ce8e0, 0x8fb0ff, 0xf2a2c4, 0x7fdca8];
+    for (let i = 0; i < 9; i++) {
+      const a = i / 9 * Math.PI * 2 + .4, r = R - 9 - Math.random() * 6;
+      const x = Math.cos(a) * r, z = Math.sin(a) * r;
+      const col = crystalCols[i % crystalCols.length];
+      const cl = new Grp(); cl.position.set(x, 0, z); cl.rotation.y = Math.random() * 6; G.add(cl);
+      for (let k = 0; k < 3; k++) {
+        const sh = 1.6 + Math.random() * 2.4;
+        const c = this.m(new OctGeo(.55 + Math.random() * .5, 0),
+          new StdMat({ color: col, emissive: new Col(col), emissiveIntensity: 1.1, roughness: .2, flatShading: true }),
+          (Math.random() - .5) * 2.2, sh * .5, (Math.random() - .5) * 2.2, { parent: cl, cast: false });
+        c.scale.y = sh;
+      }
+      G.add(this.glowSprite(col, 6, new V3(x, 2, z)));
+      const src = this.addLight(CX + x, 3, CZ + z, col, 8, 26);
+      this.anims.push(t => { src.intensity = 7 + Math.sin(t * 1.3 + i) * 1.6; });
+    }
+
+    /* underground pool */
+    this.m(new CircleGeo(9, 32), this.mat(0x0d2b3d, { roughness: .12, metalness: .55 }),
+      -20, .12, 18, { rx: -Math.PI / 2, cast: false, parent: G });
+    this.m(new RingGeo(8.8, 10.4, 32), rockDark, -20, .14, 18, { rx: -Math.PI / 2, cast: false, parent: G });
+    G.add(this.glowSprite(0x4a9ac0, 12, new V3(-20, 1.2, 18)));
+
+    /* glowing mushrooms */
+    for (let i = 0; i < 22; i++) {
+      const a = Math.random() * 6.28, r = 10 + Math.random() * (R - 13);
+      const x = Math.cos(a) * r, z = Math.sin(a) * r;
+      const s = .3 + Math.random() * .5;
+      this.m(new CylGeo(.08 * s, .12 * s, s * 2, 5), this.mat(0xd8d2c4), x, s, z, { parent: G, cast: false });
+      this.m(new SphGeo(s * .8, 8, 6, 0, 6.3, 0, Math.PI / 2),
+        new StdMat({ color: 0x9fe8d0, emissive: new Col(0x3fa88a), emissiveIntensity: .9, roughness: .6 }),
+        x, s * 2, z, { parent: G, cast: false });
+    }
+
+    /* falling drips for atmosphere */
+    const dripN = IS_TOUCH ? 30 : 70;
+    const dg = new BufGeo(), darr = new Float32Array(dripN * 3);
+    this.dripBase = [];
+    for (let i = 0; i < dripN; i++) {
+      const a = Math.random() * 6.28, r = Math.random() * (R - 6);
+      this.dripBase.push({ x: Math.cos(a) * r, z: Math.sin(a) * r, ph: Math.random(), spd: .35 + Math.random() * .5 });
+    }
+    dg.setAttribute("position", new F32Attr(darr, 3));
+    const drips = new Points3(dg, new PointsMat({ color: 0x9fd8ff, size: .3, map: this.radialTexture(), transparent: true, opacity: .7, depthWrite: false, blending: BLEND_ADD }));
+    G.add(drips);
+    this.anims.push((t) => {
+      const arr = drips.geometry.attributes.position.array;
+      for (let i = 0; i < this.dripBase.length; i++) {
+        const d = this.dripBase[i];
+        const ph = (t * d.spd + d.ph) % 1;
+        arr[i * 3] = d.x; arr[i * 3 + 1] = 24 - ph * 24; arr[i * 3 + 2] = d.z;
+      }
+      drips.geometry.attributes.position.needsUpdate = true;
+    });
+
+    /* ---- the cabinets ---- */
+    this.caveSpots = [];
+    const machines = [
+      { game: "pong", col: 0x7ce8e0, label: { es: "PONG", en: "PONG" } },
+      { game: "snake", col: 0xffd76a, label: { es: "GLOTÓN", en: "GREEDY" } },
+      { game: "runes", col: 0xf2a2c4, label: { es: "RUNAS", en: "RUNES" } },
+      { game: null, col: 0x8fb0ff, label: { es: "ENIGMA", en: "RIDDLE" } }
+    ];
+    machines.forEach((mc, i) => {
+      const a = Math.PI / 2 + (i - 1.5) * .62;   // arc of cabinets on the far side
+      const x = Math.cos(a) * 24, z = Math.sin(a) * 24;
+      this.caveCabinet(G, x, z, Math.atan2(-x, -z), mc);
+      this.caveSpots.push({
+        x: CX + x, z: CZ + z, r: 6,
+        meta: {
+          kind: mc.game ? "arcade" : "mm", game: mc.game, color: "#" + new Col(mc.col).getHexString(),
+          name: { es: mc.game ? L(ARCADE_GAMES.find(g => g.id === mc.game).name) : "El código ancestral",
+                  en: mc.game ? L(ARCADE_GAMES.find(g => g.id === mc.game).name) : "The ancient code" },
+          lore: { es: "Una máquina que lleva siglos esperando a alguien con monedas.",
+                  en: "A machine that has waited centuries for someone with coins." },
+          portal: true, cave: true
+        }
+      });
+    });
+
+    /* ---- the way back up ---- */
+    const ex = new Grp(); ex.position.set(0, 0, -30); G.add(ex);
+    for (let i = 0; i < 5; i++)
+      this.m(new BoxGeo(7 - i * .6, .5, 2), rock, 0, .25 + i * .55, -i * 1.7, { parent: ex, recv: true });
+    this.m(new TorusGeo(2.6, .22, 8, 22, Math.PI),
+      new StdMat({ color: 0xffd76a, emissive: new Col(0xffd76a), emissiveIntensity: .55, roughness: .3 }),
+      0, 2.8, -8.4, { parent: ex, cast: false });
+    G.add(this.glowSprite(0xffd76a, 4, new V3(0, 2.4, -38.4)));
+    this.addLight(CX, 3.5, CZ - 38, 0xffd76a, 9, 30);
+    const exitLbl = this.makeLabel(state.lang === "es" ? "SALIDA" : "EXIT", "#ffd76a", 1.1);
+    exitLbl.position.set(0, 6.6, -38); G.add(exitLbl);
+    this.caveSpots.push({
+      x: CX, z: CZ - 34, r: 6,
+      meta: { kind: "exit", color: "#ffd76a", portal: true, cave: true,
+        name: { es: "Volver a la superficie", en: "Back to the surface" },
+        lore: { es: "El sol de la isla te espera arriba.", en: "The island sun is waiting up there." } }
+    });
+
+    /* ---- the mouth, up on the island ----
+       A boulder pile with a black opening punched through it, turned to face
+       the plaza so players walking out from the centre see the hole, not the
+       back of a rock. */
+    const M = new Grp();
+    M.position.set(CAVE_MOUTH.x, 0, CAVE_MOUTH.z);
+    M.rotation.y = Math.atan2(-CAVE_MOUTH.x, -CAVE_MOUTH.z);   // +Z faces the island centre
+    this.scene.add(M);
+    const mound = this.mat(0x4a4457, { roughness: 1, flatShading: true });
+    const moundDark = this.mat(0x352f42, { roughness: 1, flatShading: true });
+    [[0, 2.2, -5.5, 6.4, 0], [-5.2, 1.6, -2.6, 4.4, 1], [5.2, 1.6, -2.6, 4.4, 1],
+     [0, 6.2, -4.6, 4.2, 0], [-3.4, 4.4, -6.6, 3.6, 1], [3.4, 4.4, -6.6, 3.6, 1],
+     [-4.4, .8, 1.2, 3, 1], [4.4, .8, 1.2, 3, 1]].forEach(([dx, dy, dz, r, dark], i) => {
+      const b = this.m(new IcoGeo(r, 0), dark ? moundDark : mound, dx, dy, dz, { parent: M, recv: true });
+      b.rotation.set(hash2(i, 1) * 3, hash2(i, 2) * 6, hash2(i, 3) * 3);
+    });
+
+    /* the opening: a black disc with a lintel over it */
+    this.m(new CircleGeo(2.8, 24), this.bmat(0x04040a), 0, 2.7, 1.1, { parent: M, cast: false });
+    this.m(new BoxGeo(7, 1.1, 1.6), moundDark, 0, 5.4, .9, { parent: M });
+    this.m(new BoxGeo(1.6, 5.2, 1.6), mound, -3.3, 2.6, .9, { parent: M });
+    this.m(new BoxGeo(1.6, 5.2, 1.6), mound, 3.3, 2.6, .9, { parent: M });
+
+    /* colliders leave the doorway itself open */
+    const mrot = (lx, lz) => ({
+      x: CAVE_MOUTH.x + lx * Math.cos(M.rotation.y) + lz * Math.sin(M.rotation.y),
+      z: CAVE_MOUTH.z - lx * Math.sin(M.rotation.y) + lz * Math.cos(M.rotation.y)
+    });
+    let mp = mrot(0, -5); this.sbox(15, 12, 9, mp.x, 6, mp.z, M.rotation.y);
+    mp = mrot(-4.4, .8); this.sbox(4, 10, 4, mp.x, 5, mp.z, M.rotation.y);
+    mp = mrot(4.4, .8); this.sbox(4, 10, 4, mp.x, 5, mp.z, M.rotation.y);
+
+    const glowPos = mrot(0, 1.4);
+    this.addLight(glowPos.x, 2.8, glowPos.z, 0x7ce8e0, 7, 18);
+    /* keep the halo low and small: it should rim the doorway, not fill it */
+    M.add(this.glowSprite(0x7ce8e0, 2.4, new V3(0, .9, 1.6)));
+    M.add(this.glowSprite(0x7ce8e0, 1.6, new V3(-3.3, 4.6, 1.2)));
+    M.add(this.glowSprite(0x7ce8e0, 1.6, new V3(3.3, 4.6, 1.2)));
+    const signPos = mrot(5.5, 3.5);
+    this.sign(signPos.x, signPos.z, M.rotation.y + Math.PI,
+      state.lang === "es" ? "Cueva de Cristal" : "Crystal Cave", "#7ce8e0");
+    const mouthLbl = this.makeLabel(state.lang === "es" ? "Cueva de Cristal" : "Crystal Cave", "#7ce8e0", 2.2);
+    mouthLbl.position.set(CAVE_MOUTH.x, 10, CAVE_MOUTH.z);
+    this.scene.add(mouthLbl);
+    this.labels.push(mouthLbl);
+    this.caveMouthFacing = M.rotation.y;
+
+    const trig = mrot(0, 4.5);
+    this.surfaceSpots = [{
+      x: trig.x, z: trig.z, r: 5.5,
+      meta: { kind: "cave", color: "#7ce8e0", portal: true,
+        name: { es: "Cueva de Cristal", en: "Crystal Cave" },
+        lore: { es: "Bajo la isla hay una sala llena de máquinas viejas que todavía funcionan.",
+                en: "Under the island there is a hall full of old machines that still work." } }
+    }];
+
+    /* rings under every interactive spot, same language as the temples */
+    for (const sp of this.caveSpots.concat(this.surfaceSpots)) {
+      const ring = this.m(new RingGeo(sp.r - 1.2, sp.r - .5, 40),
+        this.bmat(new Col(sp.meta.color).getHex(), { transparent: true, opacity: .4, side: SIDE_DOUBLE }),
+        sp.x, .09, sp.z, { rx: -Math.PI / 2, cast: false });
+      sp.ring = ring;
+      this.anims.push(t => {
+        ring.material.opacity = .3 + Math.sin(t * 2 + sp.x) * .1 + (state.near === sp ? .35 : 0);
+      });
+    }
+  }
+
+  caveCabinet(parent, x, z, ry, mc) {
+    const C = new Grp(); C.position.set(x, 0, z); C.rotation.y = ry; parent.add(C);
+    const body = this.mat(0x2a2436, { roughness: .6 });
+    this.m(new BoxGeo(3.4, 5.2, 2), body, 0, 2.6, 0, { parent: C, recv: true });
+    this.m(new BoxGeo(3.7, .8, 2.3), this.mat(mc.col, { roughness: .5, emissive: new Col(mc.col), emissiveIntensity: .35 }), 0, 5.5, 0, { parent: C });
+    /* screen */
+    this.m(new PlaneGeo(2.5, 1.8), new StdMat({ color: mc.col, emissive: new Col(mc.col), emissiveIntensity: 1.4, roughness: .3 }),
+      0, 3.5, 1.02, { parent: C, cast: false });
+    /* control deck */
+    this.m(new BoxGeo(3.4, .4, 1.1), body, 0, 2.1, 1.3, { parent: C });
+    this.m(new SphGeo(.2, 8, 6), this.mat(0xf07a6a, { roughness: .3 }), -.8, 2.4, 1.3, { parent: C, cast: false });
+    this.m(new CylGeo(.11, .11, .5, 6), this.mat(0xd6d2c8), .5, 2.45, 1.3, { parent: C, cast: false });
+    const lbl = this.makeLabel(L(mc.label), "#" + new Col(mc.col).getHexString(), 1.1);
+    lbl.position.set(0, 6.6, 0); C.add(lbl);
+    const wx = parent.position.x + x, wz = parent.position.z + z;
+    this.sbox(3.6, 5.4, 2.2, wx, 2.6, wz, ry);
+    this.addLight(wx, 3.6, wz, mc.col, 6, 16);
+  }
+
+  /* ---- travelling between the island and the cave ---- */
+  enterCave() {
+    if (state.inCave) return;
+    fadeThrough(() => {
+      state.inCave = true;
+      this.catBody.position.set(CAVE.x, 1.2, CAVE.z - 16);
+      this.catBody.velocity.setZero();
+      this.heading = 0; this.camYaw = 0;
+      this.applyCaveMood(true);
+      toast(state.lang === "es" ? "Cueva de Cristal · 3 máquinas y un enigma"
+                                : "Crystal Cave · 3 machines and a riddle", 2600);
+    });
+  }
+  exitCave() {
+    if (!state.inCave) return;
+    fadeThrough(() => {
+      state.inCave = false;
+      this.catBody.position.set(CAVE_MOUTH.x, 2, CAVE_MOUTH.z + 6);
+      this.catBody.velocity.setZero();
+      this.heading = Math.PI; this.camYaw = 0;
+      this.applyCaveMood(false);
+    });
+  }
+  applyCaveMood(inside) {
+    const f = this.scene.fog;
+    if (inside) {
+      f.color.set(0x07070d); f.near = 6; f.far = 78;
+      this.scene.background = null;
+      this.sun.intensity = 0;
+      this.hemi.intensity = .5;
+      this.hemi.color.set(0x6f86b8);
+      this.hemi.groundColor.set(0x2b2536);
+      Snd.setZone("gamedev");
+    } else {
+      f.color.set(0x2a3c58); f.near = 90; f.far = 430;
+      this.scene.background = this.sky;
+      this.sun.intensity = 2.5;
+      this.hemi.intensity = 1;
+      this.hemi.color.set(0x7fa2dc);
+      this.hemi.groundColor.set(0x3d4632);
+    }
+    for (const o of this.outdoorOnly) o.visible = !inside;
+    for (const l of this.outdoorLights) l.visible = !inside;
+    this.caveKey.visible = inside;
+    this.caveFill.visible = inside;
+    this.caveGrp.visible = inside;
+  }
+
 
   /* ============ the cat ============ */
   buildCat() {
@@ -7333,7 +8094,8 @@ class Game {
   /* grounded check: the heightmap first, then real physics contacts */
   checkGrounded() {
     const p = this.catBody.position;
-    if (p.y - .8 <= heightAt(p.x, p.z) + .09) return true;
+    const gy = state.inCave ? 0 : heightAt(p.x, p.z);
+    if (p.y - .8 <= gy + .09) return true;
     for (const c of this.world.contacts) {
       if (c.bi === this.catBody || c.bj === this.catBody) {
         const n = c.ni;
@@ -7371,7 +8133,7 @@ class Game {
       if (!this.wasGrounded && Math.abs(b.velocity.y) < 4) {
         this.squash = .62;                       // landing squash
         Snd.land(this.fallSpeed > 9);
-        const gy = heightAt(b.position.x, b.position.z);
+        const gy = state.inCave ? 0 : heightAt(b.position.x, b.position.z);
         for (let i = 0; i < 3; i++) this.spawnDust(b.position.x, gy + .15, b.position.z, true);
       }
     }
@@ -7394,7 +8156,7 @@ class Game {
           this.flipT = 0;
           toast(TXT()[this.flipDir > 0 ? "flipFront" : "flipBack"], 700);
         }
-        for (let i = 0; i < 2; i++) this.spawnDust(b.position.x, heightAt(b.position.x, b.position.z) + .15, b.position.z);
+        for (let i = 0; i < 2; i++) this.spawnDust(b.position.x, this.groundY + .15, b.position.z);
       }
     } else this.jumpLatch = false;
 
@@ -7403,7 +8165,7 @@ class Game {
     this.dustTimer -= dt;
     if (sprint && this.grounded && spd > 10 && this.dustTimer <= 0) {
       this.dustTimer = .1;
-      this.spawnDust(b.position.x - sx, heightAt(b.position.x - sx, b.position.z - cz) + .15, b.position.z - cz);
+      this.spawnDust(b.position.x - sx, this.groundY + .15, b.position.z - cz);
     }
   }
 
@@ -7425,15 +8187,18 @@ class Game {
     /* The physics floor is an infinite plane, so without this the cat would
        happily stroll out across the sea. A radial clamp against the real
        coastline is watertight in a way a ring of wall boxes was not. */
-    const dOut = Math.hypot(pos.x, pos.z);
-    const limit = coastRadius(Math.atan2(pos.z, pos.x)) - 2;
-    if (dOut > limit) {
-      const k = limit / dOut;
-      pos.x *= k; pos.z *= k;
-      b.velocity.x *= .25; b.velocity.z *= .25;
+    if (!state.inCave) {
+      const dOut = Math.hypot(pos.x, pos.z);
+      const limit = coastRadius(Math.atan2(pos.z, pos.x)) - 2;
+      if (dOut > limit) {
+        const k = limit / dOut;
+        pos.x *= k; pos.z *= k;
+        b.velocity.x *= .25; b.velocity.z *= .25;
+      }
     }
 
-    this.groundY = heightAt(pos.x, pos.z);
+    /* the cave floor is the flat physics plane; no heightmap down there */
+    this.groundY = state.inCave ? 0 : heightAt(pos.x, pos.z);
     const gap = pos.y - .8 - this.groundY;
     if (gap < 0) {
       pos.y = this.groundY + .8;
@@ -7540,7 +8305,7 @@ class Game {
     this.camGoal.set(pos.x - cs * 12, pos.y + 6.5, pos.z - cc * 12);
     this.camera.position.lerp(this.camGoal, Math.min(1, dt * 4));
     /* never let the follow camera sink into a hillside */
-    const camFloor = heightAt(this.camera.position.x, this.camera.position.z) + 1.8;
+    const camFloor = (state.inCave ? 0 : heightAt(this.camera.position.x, this.camera.position.z)) + 1.8;
     if (this.camera.position.y < camFloor) this.camera.position.y = camFloor;
     this.camLook.lerp(new V3(pos.x + cs * 3, pos.y + 1, pos.z + cc * 3), Math.min(1, dt * 6));
     this.camera.lookAt(this.camLook);
@@ -7567,11 +8332,12 @@ class Game {
 
     /* zone proximity + discovery */
     let nearZone = null, best = 1e9;
-    for (const z of this.zones) {
+    const spots = state.inCave ? this.caveSpots : this.zones.concat(this.surfaceSpots);
+    for (const z of spots) {
       const d = Math.hypot(pos.x - z.x, pos.z - z.z);
       if (d < z.r && d < best) { best = d; nearZone = z; }
-      z.light.intensity += (((d < z.r) ? 16 : 7) - z.light.intensity) * .08;
-      if (d < z.r && !z.discovered) {
+      if (z.light) z.light.intensity += (((d < z.r) ? 16 : 7) - z.light.intensity) * .08;
+      if (d < z.r && !z.discovered && !z.meta.portal) {
         z.discovered = true;
         state.zonesFound++;
         updateHud();
@@ -7582,10 +8348,10 @@ class Game {
       }
     }
     setNear(nearZone);
-    Snd.setZone(nearZone ? nearZone.meta.key : "default");
+    Snd.setZone(nearZone && nearZone.meta.key ? nearZone.meta.key : (state.inCave ? "gamedev" : "default"));
 
     /* fish pickup */
-    for (const f of this.fishes) {
+    for (const f of (state.inCave ? [] : this.fishes)) {
       if (f.taken) continue;
       if (Math.hypot(pos.x - f.x, pos.z - f.z) < 1.9 && Math.abs(pos.y - f.mesh.position.y) < 2.4) {
         f.taken = true;
@@ -7643,6 +8409,7 @@ async function boot() {
     $("#startBtn").classList.add("show");
     window.__game = game;
     window.__snd = Snd;
+    window.__arc = Arc;
     window.__cat = () => ({
       p: [game.catBody.position.x, game.catBody.position.y, game.catBody.position.z],
       speed: game.catBody.velocity.length(),
