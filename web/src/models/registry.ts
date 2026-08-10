@@ -86,7 +86,8 @@ export const MODELS: Record<string, ModelSpec> = {
   },
   "coaster-car": {
     file: "coaster-car.glb",
-    scale: 1,
+    /* Kenney's coaster-train is 0.7m across and the rails are 1.1m apart */
+    scale: 1.28,
     collider: "none",
     note: "One car of the train. Origin at the axle line, nose toward +Z, 1.5m long. A child named 'rider' is hidden while you are riding.",
     fallback: () => new THREE.Group()
@@ -120,6 +121,16 @@ export const MODELS: Record<string, ModelSpec> = {
      Every one of them already lands on y=0 and is centred on XZ, which is the
      folder's convention met without a correction. Only the scale needed
      setting: the kit is authored small, around 1.5m for a stall. */
+  "coaster-car-front": {
+    file: "coaster-car-front.glb", scale: 1.28, collider: "none",
+    note: "Lead car of the train, nose toward +Z. Origin on the axle line, 1.5m long before scale.",
+    fallback: () => new THREE.Group()
+  },
+  "park-fence": {
+    file: "park-fence.glb", scale: 1, collider: "none",
+    note: "One metre of railing, stretched on X to close the gap to its neighbour. Origin on the ground, rail running along X.",
+    fallback: () => new THREE.Group()
+  },
   "park-gate": {
     file: "park-gate.glb", scale: 2.3, collider: "none",
     note: "Arch at the end of the boardwalk. Origin on the deck, facing +Z, 2.43m tall before scale.",

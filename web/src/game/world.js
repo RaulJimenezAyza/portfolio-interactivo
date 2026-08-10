@@ -1945,7 +1945,7 @@ function isletHeight(x, z) {
 const PARK_BRG = -78.3 * Math.PI / 180;      // the widest gap between roads
 const PU = { x: Math.cos(PARK_BRG), z: Math.sin(PARK_BRG) };
 const atP = r => ({ x: PU.x * r, z: PU.z * r });
-const PARK_R = 44, PARK_Y = 3;
+const PARK_R = 50, PARK_Y = 3;
 const PARK = atP(158);
 const PARK_A = atP(coastRadius(PARK_BRG) - 5);
 const PARK_B = atP(158 - PARK_R + 8);
@@ -1953,9 +1953,18 @@ const PARK_HALF = 3;
 const PARK_ROAD = { x1: 0, z1: 0, x2: PARK_A.x, z2: PARK_A.z };
 PATH_LINES.push(PARK_ROAD);
 const PARK_Y0 = islandHeight(PARK_A.x, PARK_A.z) + .35;
-/* flatter outline than the islet's: this one has a fairground laid out on it
-   and a scalloped edge would leave the coaster's outer turn hanging in air */
-const parkEdge = a => PARK_R * (.93 + .14 * fbm(Math.cos(a) * 2.4 - 7, Math.sin(a) * 2.4 + 5, 2));
+/* Flatter outline than the islet's: this one has a fairground laid out on it
+   and a scalloped edge would leave the coaster's outer turn hanging in air.
+
+   Asymmetric on purpose. Growing the radius alone would push the far shore
+   out and drag the near one with it, shortening the bridge and moving the
+   gate; a lobe biased away from the main island adds the room where the rides
+   need it and leaves the landing exactly where it was. `back` is 1 on the far
+   side and 0 on the shore facing home. */
+const parkEdge = a => {
+  const back = (1 - Math.cos(a - PARK_BRG)) / 2;
+  return PARK_R * (.78 + .3 * back + .12 * fbm(Math.cos(a) * 2.4 - 7, Math.sin(a) * 2.4 + 5, 2));
+};
 
 function parkHeight(x, z) {
   const d = Math.hypot(x - PARK.x, z - PARK.z);
@@ -4264,33 +4273,57 @@ class Game {
   }
 
   /* ============ the fairground ============ */
+  /* ---- the layout ----
+     Written down rather than spread through the code that builds it. Every
+     position on this island used to be an expression at its own call site,
+     which meant the only way to know whether two things overlapped was to run
+     it and look. As data it can be read, checked and drawn — and auditPark()
+     below does check it.
+
+     Coordinates are (forward, side) from the island centre: forward is away
+     from the main island, side is to the left of that. */
+  parkPlan() {
+    return {
+      midway:   { fwd: 20, side: 0, r: 13 },
+      wheel:    { fwd: 2, side: 21, r: 15 },
+      carousel: { fwd: 4, side: -23, r: 8 },
+      kiosks: [
+        { key: "stall-food", fwd: 15, side: -9 },
+        { key: "stall-drinks", fwd: 19.5, side: 10.5 },
+        { key: "stall-information", fwd: 24, side: -12 },
+        { key: "stall-toilets", fwd: 28.5, side: 13.5 }
+      ]
+    };
+  }
+
   buildPark() {
     const perp = { x: -PU.z, z: PU.x };
     const at = (fwd, side) => ({ x: PARK.x + PU.x * fwd + perp.x * side,
                                  z: PARK.z + PU.z * fwd + perp.z * side });
+    const plan = this.parkPlan();
+    this.auditPark(plan, at);
     /* a worn midway between the gate and the rides */
-    const mid = at(20, 0);
+    const mid = at(plan.midway.fwd, plan.midway.side);
     this.m(new CircleGeo(13, 40), this.detail(this.mat(0x6f6555, { roughness: .95 }), 2.6, .17),
       mid.x, PARK_Y + .06, mid.z, { rx: -Math.PI / 2, cast: false, recv: true });
 
     /* Pulled in from twenty-five: the rim is fourteen metres, so out there
        half the wheel hung over the water. */
-    const wheel = at(2, 21);
+    const wheel = at(plan.wheel.fwd, plan.wheel.side);
     /* The rim lies in the group's ZY plane, so the wheel's face normal is its
        local +X. Aim that at the middle of the park or you get a fourteen-metre
        wheel presented edge-on to everyone walking the midway. */
     this.ferrisWheel(wheel.x, wheel.z, Math.atan2(perp.z, -perp.x));
-    const car = at(4, -23);
+    const car = at(plan.carousel.fwd, plan.carousel.side);
     this.carousel(car.x, car.z);
 
     /* Kiosks along the midway, because a fair with only rides is a car park.
        Four different ones now rather than three of the same box in three
        colours — they come from one kit, so they agree with each other. */
-    const kiosks = ["stall-food", "stall-drinks", "stall-information", "stall-toilets"];
-    kiosks.forEach((key, i) => {
-      const p = at(15 + i * 4.5, (i % 2 ? 1 : -1) * (9 + i * 1.5));
-      this.kiosk(key, p.x, p.z, Math.atan2(PARK.x - p.x, PARK.z - p.z));
-    });
+    for (const k of plan.kiosks) {
+      const p = at(k.fwd, k.side);
+      this.kiosk(k.key, p.x, p.z, Math.atan2(PARK.x - p.x, PARK.z - p.z));
+    }
 
     /* and the small stuff that makes a midway feel walked on rather than
        laid out: benches facing the rides, bins beside them, flower beds in
@@ -4438,6 +4471,73 @@ class Game {
     });
   }
 
+
+  /* ---- does the plan fit on the island? ----
+     Cheap, runs at build, and says so in the console rather than failing. The
+     things it catches are the things that are invisible until you walk into
+     them: a ride whose footprint hangs off the shore, two of them sharing
+     ground, a kiosk standing in the water. Every one of those has happened on
+     this island already and was found by looking, which is the slow way. */
+  auditPark(plan, at) {
+    const problems = [];
+    const items = [
+      { name: "midway", ...plan.midway },
+      { name: "wheel", ...plan.wheel },
+      { name: "carousel", ...plan.carousel },
+      ...plan.kiosks.map(k => ({ name: k.key, fwd: k.fwd, side: k.side, r: 2.5 }))
+    ];
+    for (const it of items) {
+      const p = at(it.fwd, it.side);
+      const d = Math.hypot(p.x - PARK.x, p.z - PARK.z);
+      const edge = parkEdge(Math.atan2(p.z - PARK.z, p.x - PARK.x));
+      if (d + it.r > edge - 2)
+        problems.push(`${it.name} reaches ${(d + it.r).toFixed(1)}m from centre, shore is at ${(edge - 2).toFixed(1)}m`);
+      const g = heightAt(p.x, p.z);
+      if (g < PARK_Y - .5)
+        problems.push(`${it.name} stands on ground at y=${g.toFixed(1)}, below the park's ${PARK_Y}`);
+    }
+    for (let i = 0; i < items.length; i++)
+      for (let j = i + 1; j < items.length; j++) {
+        const a = at(items[i].fwd, items[i].side), b = at(items[j].fwd, items[j].side);
+        const gap = Math.hypot(a.x - b.x, a.z - b.z) - items[i].r - items[j].r;
+        if (gap < 0) problems.push(`${items[i].name} and ${items[j].name} overlap by ${(-gap).toFixed(1)}m`);
+      }
+    if (problems.length) console.warn("[park] layout: " + problems.join(" | "));
+    return problems;
+  }
+
+  /* ---- the railing round the shore ----
+     A flat disc of grass ending in a cliff reads as a placeholder however much
+     is standing on it. A fence gives the island an edge you can see from the
+     bridge and tells you where the ground stops before you find out by
+     falling. Queue railing from the same kit as everything else here.
+
+     Set back from the true edge rather than laid on it: the outline is noisy,
+     and a rail following it exactly ends up half over the water wherever the
+     shore dips in. */
+  buildParkFence() {
+    const N = IS_TOUCH ? 44 : 76;
+    const posts = [];
+    for (let i = 0; i < N; i++) {
+      const a = i / N * Math.PI * 2;
+      const r = parkEdge(a) - 3.4;
+      const x = PARK.x + Math.cos(a) * r, z = PARK.z + Math.sin(a) * r;
+      /* leave the gate its gap: nobody fences off their own entrance */
+      const toGate = Math.abs(((a - Math.atan2(PARK_B.z - PARK.z, PARK_B.x - PARK.x)) + Math.PI * 3) % (Math.PI * 2) - Math.PI);
+      if (toGate < .22) continue;
+      const G = getModel("park-fence");
+      /* each tile is a metre wide, so it has to be stretched to close the gap
+         to its neighbour or the ring comes out as a dotted line */
+      const step = 2 * Math.PI * r / N;
+      G.position.set(x, PARK_Y, z);
+      G.rotation.y = -a + Math.PI / 2;
+      G.scale.set(step * 1.08, 1.6, 1);
+      this.scene.add(G); this.outdoorOnly.push(G);
+      posts.push(G);
+    }
+    return posts;
+  }
+
   /* ---- a kiosk from the kit ----
      The hand-built one was a box, a counter and seven alternating awning
      panels; four of these arrive with more shape than that and, more to the
@@ -4557,6 +4657,7 @@ class Game {
     this.scene.add(track);
     this.outdoorOnly.push(track);
 
+    this.buildParkFence();
     this.buildCoasterStation();
     this.buildCoasterTrain();
   }
@@ -4623,7 +4724,10 @@ class Game {
          A replacement .glb is one car and gets used for all three; that is
          the trade for making it swappable, and a coaster train whose front
          car matches the rest is not wrong, just plainer. */
-      const car = getModel("coaster-car", i);
+      /* the kit ships a distinct nose car, so the train keeps a front even
+         when it comes from the folder — the thing the variant index could not
+         give it before */
+      const car = getModel(i === 0 ? "coaster-car-front" : "coaster-car", i);
       G.add(car);
       const rider = car.getObjectByName("rider");
       if (!i && rider) this.frontRider = rider;   // hidden while you are in that seat
