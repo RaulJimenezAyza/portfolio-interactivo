@@ -6053,6 +6053,97 @@ function confineToCave(p) {
   return true;
 }
 
+/* ============================================================
+   SHADER BITS
+
+   Two things the bundle gives no ready-made pass for: a final colour
+   grade, and per-pixel surface break-up. Both are small enough to
+   write by hand against the standard material's include points.
+   ============================================================ */
+
+/* A 2D value noise, prepended to any fragment shader that wants detail.
+   Cheap on purpose: three octaves of this cost less than one texture
+   fetch would, and there are no image assets in this file to fetch. */
+const NOISE_GLSL = `
+float dh21(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123); }
+float dvnoise(vec2 p){
+  vec2 i = floor(p), f = fract(p);
+  f = f * f * (3.0 - 2.0 * f);
+  return mix(mix(dh21(i), dh21(i + vec2(1.0, 0.0)), f.x),
+             mix(dh21(i + vec2(0.0, 1.0)), dh21(i + vec2(1.0, 1.0)), f.x), f.y);
+}
+`;
+
+/* ---------- final colour grade ----------
+   Runs after OutputPass, so it works in display space on values already
+   tone-mapped and encoded — which is exactly where the dither has to be.
+   The sky is a smooth vertical gradient and bands visibly across an 8-bit
+   framebuffer; a ±½ LSB of noise removes the rings for free.
+
+   ShaderMaterial and FullScreenQuad are both in the bundle but neither is
+   exported under a name this file can reach, so the pass borrows the
+   constructors off two passes that already exist. That is deliberately not a
+   hard-coded minified identifier: those change every time the bundle is
+   rebuilt, the shape of these passes does not.
+
+   The material has to come from the bloom pass, not from OutputPass: this
+   build's OutputPass uses a *Raw* ShaderMaterial, which declares none of
+   `uv`, `position`, `projectionMatrix` or even a float precision, so a
+   shader written the ordinary way fails to compile against it. */
+class GradePass {
+  constructor(shaderDonor, quadDonor) {
+    const ShaderMat = shaderDonor.compositeMaterial.constructor;
+    const FSQuad = quadDonor.fsQuad.constructor;
+    this.enabled = true;
+    this.needsSwap = true;
+    this.clear = false;
+    this.renderToScreen = false;
+    this.uniforms = {
+      tDiffuse: { value: null },
+      uVig: { value: .62 },      // stronger underground, see applyDepth
+      uWarm: { value: 1 }        // 1 outdoors, 0 in the caves
+    };
+    this.material = new ShaderMat({
+      uniforms: this.uniforms,
+      depthTest: false,
+      depthWrite: false,
+      vertexShader: `
+        varying vec2 vUv;
+        void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
+      fragmentShader: `
+        uniform sampler2D tDiffuse;
+        uniform float uVig;
+        uniform float uWarm;
+        varying vec2 vUv;
+        void main(){
+          vec3 c = texture2D(tDiffuse, vUv).rgb;
+          float l = dot(c, vec3(0.2126, 0.7152, 0.0722));
+          c = mix(vec3(l), c, 1.08);                        // a shade more colour
+          c = mix(c, c * c * (3.0 - 2.0 * c), 0.16);        // gentle S-curve, keeps the ends
+          /* split tone: the sun is low and warm, so warm the highlights and let
+             the shadows fall toward the sky's blue. Neutral in the caves. */
+          c += (vec3( 0.032, 0.013, -0.022) * l +
+                vec3(-0.010, 0.002,  0.028) * (1.0 - l)) * uWarm;
+          vec2 d = vUv - 0.5;
+          d.x *= 1.15;                                      // rounder corners on wide screens
+          c *= 1.0 - dot(d, d) * uVig;
+          float n = fract(sin(dot(gl_FragCoord.xy, vec2(12.9898, 78.233))) * 43758.5453);
+          c += (n - 0.5) / 255.0;                           // dither, kills the sky banding
+          gl_FragColor = vec4(max(c, 0.0), 1.0);
+        }`
+    });
+    this.fsQuad = new FSQuad(this.material);
+  }
+  setSize() {}
+  dispose() { this.material.dispose(); this.fsQuad.dispose(); }
+  render(renderer, writeBuffer, readBuffer) {
+    this.uniforms.tDiffuse.value = readBuffer.texture;
+    renderer.setRenderTarget(this.renderToScreen ? null : writeBuffer);
+    if (this.clear) renderer.clear();
+    this.fsQuad.render(renderer);
+  }
+}
+
 class Game {
   constructor(host) {
     this.host = host;
@@ -6076,12 +6167,24 @@ class Game {
     this.camGoal = new V3(); this.camLook = new V3();
     this.camYaw = 0; this.fovGoal = 60;
 
+    /* The composer is always in the chain now, even where bloom is not:
+       the grade at the end of it costs one full-screen pass and is what
+       keeps the sky from banding, which is worse on a phone, not better.
+       Bloom is the expensive pass, so that is the one that gets switched
+       off — it used to take the whole composer down with it. */
     this.useBloom = !IS_TOUCH && !REDUCED;
     this.composer = new Composer(this.renderer);
     this.composer.addPass(new RenderPass(this.scene, this.camera));
     this.bloom = new BloomPass(new V2(innerWidth, innerHeight), .42, .5, .82);
+    this.bloom.enabled = this.useBloom;
     this.composer.addPass(this.bloom);
-    this.composer.addPass(new OutPass());
+    const outPass = new OutPass();
+    this.composer.addPass(outPass);
+    this.grade = new GradePass(this.bloom, outPass);
+    this.composer.addPass(this.grade);
+
+    /* one clock shared by every swaying material, ticked once a frame */
+    this.windU = { value: 0 };
 
     /* ---------- lighting rig: golden-hour dusk ----------
        The sun disc sits low toward -Z, so the key light comes from there and
@@ -6233,6 +6336,89 @@ class Game {
   /* ============ small helpers ============ */
   mat(c, o = {}) { return new StdMat(Object.assign({ color: c, roughness: .85, metalness: .05 }, o)); }
   bmat(c, o = {}) { return new BasicMat(Object.assign({ color: c }, o)); }
+
+  /* ---------- per-pixel surface detail ----------
+     Vertex colours can only vary as fast as the mesh is subdivided, and the
+     carved-flat lawn around the plaza is very nearly one enormous quad — it
+     reads as painted plastic no matter how good the palette is. This mixes a
+     world-space value noise into the albedo of a standard material, so the
+     break-up is per-pixel and owes nothing to the geometry.
+
+     World space, not UV: the terrain is a displaced plane whose UVs stretch
+     over every slope, and neighbouring meshes that meet at a seam have to
+     agree on the pattern or the join lights up.
+
+     The fine octave fades out with view distance. Left on, it turns into
+     aliasing fizz across the far half of the island the moment the camera
+     moves — the one thing worse than a flat lawn. */
+  detail(mat, scale = 1, amt = .16) {
+    mat.onBeforeCompile = sh => {
+      sh.uniforms.uDetail = { value: new V2(scale, amt) };
+      sh.vertexShader = "varying vec3 vDetailPos;\n" + sh.vertexShader.replace(
+        "#include <begin_vertex>",
+        "#include <begin_vertex>\n  vDetailPos = (modelMatrix * vec4(transformed, 1.0)).xyz;");
+      /* after <color_fragment>, so vertex colours are already folded in and
+         this modulates the finished albedo rather than fighting it */
+      sh.fragmentShader = NOISE_GLSL + "uniform vec2 uDetail;\nvarying vec3 vDetailPos;\n" +
+        sh.fragmentShader.replace("#include <color_fragment>", `#include <color_fragment>
+        {
+          vec2 q = vDetailPos.xz * uDetail.x;
+          /* vViewPosition is view-space and always declared by the standard
+             material, unlike cameraPosition which depends on the prefix */
+          float near = 1.0 - smoothstep(45.0, 170.0, length(vViewPosition));
+          float n = dvnoise(q * 0.33) * 0.50
+                  + dvnoise(q * 1.30) * 0.32
+                  + dvnoise(q * 5.10) * 0.18 * near - 0.5;
+          diffuseColor.rgb *= 1.0 + n * uDetail.y * 2.0;
+          diffuseColor.rgb += vec3(-0.010, 0.014, -0.012) * n;   // a little hue drift too
+        }`);
+    };
+    /* Materials that share a program also share the uniforms added in
+       onBeforeCompile — and the second one's hook never runs at all. Both
+       numbers go in the cache key so a coarse surface and a fine one can
+       never collapse into each other. */
+    mat.customProgramCacheKey = () => "detail" + scale + "_" + amt;
+    return mat;
+  }
+
+  /* ---------- wind ----------
+     A rigid horizontal offset per mesh, phased off the mesh origin. Not a
+     per-vertex bend: the crowns are cones and spheres a metre or two across,
+     and displacing their vertices by world position shears them into
+     lopsided blobs. Offsetting the whole crown a few centimetres reads as
+     sway and leaves the silhouette intact. Trunks get no wind at all, so the
+     join never opens up. */
+  wind(mat, amp = .09) {
+    if (REDUCED) return mat;          // ambient motion is exactly what that setting is asking us to stop
+    mat.onBeforeCompile = sh => {
+      sh.uniforms.uWind = this.windU;
+      sh.uniforms.uWindAmp = { value: amp };
+      sh.vertexShader = "uniform float uWind;\nuniform float uWindAmp;\n" + sh.vertexShader.replace(
+        "#include <begin_vertex>", `#include <begin_vertex>
+        {
+          vec3 org = (modelMatrix * vec4(0.0, 0.0, 0.0, 1.0)).xyz;
+          float w = sin(uWind * 1.15 + org.x * 0.13 + org.z * 0.09)
+                  + 0.45 * sin(uWind * 2.60 + org.z * 0.19);
+          transformed.x += w * uWindAmp;
+          transformed.z += w * uWindAmp * 0.6;
+        }`);
+    };
+    /* keyed by amplitude: the tufts sway at half the trees' and would
+       otherwise inherit the trees' uniform off a shared program */
+    mat.customProgramCacheKey = () => "wind" + amp;
+    return mat;
+  }
+
+  /* One material per foliage colour instead of one per tree. Forty-six trees
+     used to mean about a hundred and eighty standard materials, all of them
+     identical in every way that matters — and wind needs them shared anyway,
+     since the sway lives in the material. Nothing mutates these per instance. */
+  foliageMat(hex) {
+    this.folCache = this.folCache || new Map();
+    let m = this.folCache.get(hex);
+    if (!m) { m = this.wind(this.mat(hex, { flatShading: true })); this.folCache.set(hex, m); }
+    return m;
+  }
 
   /* Push the vertices of a cylinder-like shell in and out by noise so the cave
      stops looking like it was turned on a lathe. `amp` is the largest deviation
@@ -6506,6 +6692,23 @@ class Game {
     /* roughness is what tames the moon path: any tighter and the cool fill
        light's specular clips to pure white across a third of the sea */
     const seaMat = this.mat(0x2a688f, { roughness: .52, metalness: .06, flatShading: true, vertexColors: true });
+    /* Fresnel sheen. Without an environment map the sea has nothing to
+       reflect, so grazing angles come out as dull as the water underfoot and
+       the horizon dies. Adding it to the emissive term rather than the albedo
+       keeps it out of the shadow and light maths, which is what makes it read
+       as reflected sky instead of as glowing paint. Injected after
+       <emissivemap_fragment> because that is the first point where both the
+       shaded normal and the view vector exist — and `normal`, not vNormal,
+       since the material is flat-shaded and vNormal is compiled out. */
+    seaMat.onBeforeCompile = sh => {
+      sh.fragmentShader = sh.fragmentShader.replace("#include <emissivemap_fragment>",
+        `#include <emissivemap_fragment>
+        {
+          float fres = pow(1.0 - clamp(dot(normal, normalize(vViewPosition)), 0.0, 1.0), 4.0);
+          totalEmissiveRadiance += vec3(0.085, 0.135, 0.180) * fres;
+        }`);
+    };
+    seaMat.customProgramCacheKey = () => "sea";
     const water = this.m(new RingGeo(66, 260, IS_TOUCH ? 64 : 128, IS_TOUCH ? 12 : 22), seaMat, 0, -.85, 0,
       { rx: -Math.PI / 2, cast: false, recv: true });
     const far = this.m(new RingGeo(258, 900, 72, 1), seaMat, 0, -.85, 0,
@@ -6620,7 +6823,8 @@ class Game {
     }
     geo.setAttribute("color", new F32Attr(colors, 3));
     geo.computeVertexNormals();
-    const island = new Mesh(geo, new StdMat({ vertexColors: true, roughness: 1, flatShading: false }));
+    const island = new Mesh(geo, this.detail(
+      new StdMat({ vertexColors: true, roughness: 1, flatShading: false }), 1.5, .4));
     island.rotation.x = -Math.PI / 2;
     island.receiveShadow = true;
     island.castShadow = true;
@@ -6921,7 +7125,7 @@ class Game {
     this.m(new CylGeo(.35, .55, 2.6, 7), this.mat(0x4a3324, { roughness: 1 }), 0, 1.3, 0, { parent: g });
     const greens = [0x1e4d30, 0x256240, 0x2c7048];
     for (let i = 0; i < 3; i++)
-      this.m(new ConeGeo(2.6 - i * .7, 2.6, 7), this.mat(greens[i], { flatShading: true }),
+      this.m(new ConeGeo(2.6 - i * .7, 2.6, 7), this.foliageMat(greens[i]),
         0, 3 + i * 1.7, 0, { parent: g, recv: true });
     this.scyl(.5 * s, 3 * s, x, y + 1.5 * s, z);
     this.addOccluder(x, y + 3.5 * s, z, 2.0 * s);
@@ -6934,7 +7138,7 @@ class Game {
     const cols = [0x2d6b3d, 0x3a7d4a, 0x27593a];
     for (let i = 0; i < 3; i++) {
       const a = i * 2.1;
-      this.m(new IcoGeo(1.7 - i * .25, 0), this.mat(cols[i], { flatShading: true }),
+      this.m(new IcoGeo(1.7 - i * .25, 0), this.foliageMat(cols[i]),
         Math.cos(a) * .9, 3.6 + Math.sin(a * 2) * .6, Math.sin(a) * .9, { parent: g, recv: true });
     }
     this.scyl(.6 * s, 3 * s, x, y + 1.5 * s, z);
@@ -6944,8 +7148,8 @@ class Game {
     const y = heightAt(x, z);
     const g = new Grp(); g.position.set(x, y, z); g.scale.setScalar(s); this.scene.add(g);
     this.m(new CylGeo(.32, .5, 2.8, 6), this.mat(0x4c3527, { roughness: 1 }), 0, 1.4, 0, { parent: g });
-    this.m(new IcoGeo(1.9, 0), this.mat(0xb0692f, { flatShading: true }), 0, 3.8, 0, { parent: g, recv: true });
-    this.m(new IcoGeo(1.2, 0), this.mat(0xc98a3a, { flatShading: true }), .8, 4.8, .4, { parent: g, recv: true });
+    this.m(new IcoGeo(1.9, 0), this.foliageMat(0xb0692f), 0, 3.8, 0, { parent: g, recv: true });
+    this.m(new IcoGeo(1.2, 0), this.foliageMat(0xc98a3a), .8, 4.8, .4, { parent: g, recv: true });
     this.scyl(.5 * s, 3 * s, x, y + 1.5 * s, z);
     this.addOccluder(x, y + 3.7 * s, z, 1.8 * s);
   }
@@ -6987,7 +7191,11 @@ class Game {
       const a = Math.random() * 6.28, r = 16 + Math.random() * 97;
       const x = Math.cos(a) * r, z = Math.sin(a) * r;
       if (!this.isClearOf(x, z, 0)) continue;
-      this.m(new ConeGeo(.22, .7, 4), this.mat(0x2c6b40, { flatShading: true }), x, heightAt(x, z) + .3, z, { cast: false });
+      /* tufts sway harder than the trees: they are ankle-high, so a couple of
+         centimetres of offset is a lot of movement relative to their size */
+      this.m(new ConeGeo(.22, .7, 4), this.tuftMat ||
+        (this.tuftMat = this.wind(this.mat(0x2c6b40, { flatShading: true }), .045)),
+        x, heightAt(x, z) + .3, z, { cast: false });
     }
     /* butterflies */
     this.butterflies = [];
@@ -8296,7 +8504,11 @@ class Game {
     this.caveSpots = [];
     this.rock = this.mat(0x6c6280, { roughness: 1, flatShading: true });
     this.rockDark = this.mat(0x4a4257, { roughness: 1, flatShading: true });
-    this.rockWall = new StdMat({ color: 0x5c5471, roughness: 1, flatShading: true, side: SIDE_BACK });
+    /* The walls are one huge displaced shell per corridor, so a facet can span
+       several metres — the same problem the lawn has, and the same fix. Finer
+       and stronger than outdoors: down here the wall is right next to you. */
+    this.rockWall = this.detail(
+      new StdMat({ color: 0x5c5471, roughness: 1, flatShading: true, side: SIDE_BACK }), 2.1, .34);
     /* A mottled floor keeps the big flat discs from reading as painted metal;
        the wall is faceted enough to carry itself. */
     this.rockFloor = new StdMat({
@@ -8701,7 +8913,11 @@ class Game {
       const b = this.catBody;
       if (cave) {
         const g = CAVE_NODES.gate;
-        b.position.set(g.x, 1.2, g.z + 4);
+        /* Past the middle of the room, not up against the arch: you used to
+           land two metres under the exit lamp, which is the one spot in the
+           caverns bright enough to wash the cat out completely. From here the
+           arch is still behind you and the corridor to the hub is ahead. */
+        b.position.set(g.x, 1.2, g.z - 2);
         this.heading = Math.PI;                       // face the hub
         toast(state.lang === "es" ? "Cuevas de Cristal" : "Crystal Caves", 2000);
       } else {
@@ -8728,7 +8944,12 @@ class Game {
     this.m(new BoxGeo(14, 1.6, 2.4), stone, 0, 9.2, n.r - 2, { parent: P });
     this.m(new PlaneGeo(10, 8), this.bmat(0x04040a), 0, 4, n.r - 1.2, { parent: P, cast: false });
     P.add(this.glowSprite(0x7ce8e0, 3, new V3(0, 2.4, n.r - 3)));
-    this.addLight(n.x, CAVE_Y + 3, n.z + n.r - 4, 0x7ce8e0, 8, 24);
+    /* Up at the lintel, not down at head height. Point lights here decay with
+       the square of the distance, so at eye level this one was handing the cat
+       roughly four times the irradiance of anything else in the caverns and
+       blowing it out to a white blob — the arch is what wants lighting, not
+       the floor in front of it. */
+    this.addLight(n.x, CAVE_Y + 5.4, n.z + n.r - 4, 0x7ce8e0, 6, 24);
     const lbl = this.makeLabel(state.lang === "es" ? "SALIDA" : "EXIT", "#7ce8e0", 1);
     lbl.position.set(0, 6.4, n.r - 2); P.add(lbl);
   }
@@ -8953,6 +9174,10 @@ class Game {
     this.caveFill.intensity = 1.15 * k;
     this.caveVault.intensity = .55 * k;
     for (const l of this.outdoorLights) l.intensity = (l === this.outdoorLights[0] ? .8 : .3) * (1 - k);
+    /* underground the vignette closes in and the golden-hour split tone goes
+       away — down there the only warm light is the crystals' own */
+    this.grade.uniforms.uVig.value = .62 + (1.30 - .62) * k;
+    this.grade.uniforms.uWarm.value = 1 - k;
     const outside = k < .96;
     for (const o of this.outdoorOnly) o.visible = outside;
     this.scene.background = outside ? this.sky : null;
@@ -9441,6 +9666,7 @@ class Game {
 
     /* world animations */
     this.elapsed = t;
+    this.windU.value = t;          // every swaying material reads this one uniform
     for (const fn of this.anims) fn(t, dt);
 
     /* Keep the shadow frustum tight around the cat so shadows stay crisp
@@ -9610,8 +9836,7 @@ class Game {
     }
 
     $("#speedV").textContent = Math.round(spd * 3);
-    if (this.useBloom) this.composer.render();
-    else this.renderer.render(this.scene, this.camera);
+    this.composer.render();
   }
 }
 
