@@ -6,11 +6,9 @@ const repo = "/portfolio-interactivo";
 
 /** @type {import('next').NextConfig} */
 export default {
-  /* `next build` and `next dev` both write to .next, so building while the
-     dev server is up leaves it serving a directory that has been rebuilt
-     underneath it. The symptom is not an error: the CSS links 404 and the
-     page renders as unstyled text, which looks exactly like a broken app and
-     is not one. Giving the build its own directory removes the collision. */
+  /* Only `next dev` overrides this, via scripts/dev.mjs — see the note there.
+     The build keeps the default so `output: "export"` keeps writing the
+     static site to out/, which is what CI publishes. */
   distDir: process.env.NEXT_DIST_DIR || ".next",
   output: "export",
   basePath: isProd ? repo : "",
