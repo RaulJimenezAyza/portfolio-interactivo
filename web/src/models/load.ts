@@ -3,6 +3,10 @@ import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { MODELS, type ModelSpec } from "./registry";
 import { MODEL_FILES } from "./manifest.generated";
 
+/* One door for the scene to knock on: it should not have to know that the
+   catalogue and the loader are separate files. */
+export { registerFallback, MODELS } from "./registry";
+
 const BASE = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
 const loader = new GLTFLoader();
 const cache = new Map<string, Promise<THREE.Object3D>>();
@@ -84,4 +88,37 @@ export async function loadModel(key: string): Promise<THREE.Object3D> {
 /** Preloads everything the folder holds, so the first frame is not a pop-in. */
 export async function preloadModels() {
   await Promise.all(Object.keys(MODELS).filter(hasFile).map(loadModel));
+}
+
+/* ---- the synchronous half ----
+ *
+ * The world is built in one pass of straight-line code: catStatue() is called,
+ * positioned and parented inside a single expression, and there is no point in
+ * any of it where it could await a file. Threading promises through seven
+ * thousand lines of scene construction to accommodate a folder that is usually
+ * empty would be the tail wagging the dog.
+ *
+ * So the files are fetched once before the world is built, and everything
+ * after that is synchronous. Nothing in the scene code has to know that a
+ * model might have come off the network.
+ */
+const ready = new Map<string, THREE.Object3D>();
+
+/** Resolve every file in the folder into memory. Call once, before building
+ *  the world; after this, getModel() answers immediately. */
+export async function primeModels() {
+  const keys = Object.keys(MODELS).filter(hasFile);
+  const built = await Promise.all(keys.map(k => loadModel(k)));
+  keys.forEach((k, i) => ready.set(k, built[i]));
+  return keys;
+}
+
+/** The call the scene makes. Returns the model from public/models if the file
+ *  was there when primeModels() ran, and the procedural build if it was not.
+ *  Same key, same contract, so the caller never learns which it got. */
+export function getModel(key: string): THREE.Object3D {
+  const spec = MODELS[key];
+  if (!spec) throw new Error(`getModel: unknown model "${key}"`);
+  const proto = ready.get(key);
+  return proto ? proto.clone(true) : spec.fallback();
 }

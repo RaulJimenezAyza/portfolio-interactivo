@@ -19,9 +19,18 @@ export default function Page() {
   useEffect(() => {
     document.body.dataset.lang = "es";
     let disposed = false;
-    import("@/game/world.js").catch(err => {
-      if (!disposed) console.error("[world] failed to boot", err);
-    });
+    /* Files first, then the world. primeModels() resolves whatever is in
+       public/models into memory so the scene, which is built in one
+       synchronous pass, can ask for a model and get an answer immediately. */
+    import("@/models/load")
+      .then(m => m.primeModels())
+      .then(keys => {
+        if (keys.length) console.info(`[models] from the folder: ${keys.join(", ")}`);
+        return import("@/game/world.js");
+      })
+      .catch(err => {
+        if (!disposed) console.error("[world] failed to boot", err);
+      });
     return () => { disposed = true; };
   }, []);
 

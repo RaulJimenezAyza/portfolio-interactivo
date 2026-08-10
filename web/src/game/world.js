@@ -70,6 +70,7 @@ import {
   Cylinder as CCyl,
   Plane as CPlane
 } from "cannon-es";
+import { getModel, registerFallback } from "../models/load";
 
 
 /* ---------- palette ---------- */
@@ -2487,6 +2488,11 @@ class Game {
     this.clock = new Clock3();
     this.elapsed = 0;
 
+    /* Hand the registry the procedural builders before anything asks for a
+       model. They are methods, so they need the instance — which is why this
+       lives here and not next to the registry itself. */
+    registerFallback("cat-statue", () => this.catStatue());
+
     this.buildTerrain();
     this.buildPlaza();
     this.buildPlayground();
@@ -3508,7 +3514,10 @@ class Game {
     /* The deity, scaled up rather than the fountain scaled down around it:
        from across the square the statue is the thing you should be able to
        name, and at native size on a shrunk bowl it read as an ornament. */
-    const statue = this.catStatue();
+    /* Through the registry, not straight to the builder. If public/models
+       holds a cat-statue file it arrives here instead, and nothing else in
+       this function changes — that is the whole contract the folder offers. */
+    const statue = getModel("cat-statue");
     statue.position.y = 3.06;
     statue.scale.setScalar(1.34);
     F.add(statue);
