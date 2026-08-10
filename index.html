@@ -5692,7 +5692,10 @@ function fbm(x, y, oct = 4) {
 const FLAT_DISCS = [
   { x: 0, z: 0, r: 19, fade: 9 },       // plaza + fountain
   { x: 15, z: 5, r: 15, fade: 7 },      // physics playground
-  { x: -13, z: -11, r: 9, fade: 8 },    // crate pyramid
+  /* the second crate pyramid used to stand at (-13,-11), four metres past the
+     plaza kerb, where it read as debris left on the doorstep. Moved out to the
+     far side of the lawn; the lobby got a topiary and a bench instead. */
+  { x: -27, z: -17, r: 9, fade: 8 },    // crate pyramid
   { x: -20, z: 12, r: 10, fade: 7 },    // pond
   { x: 0, z: -17, r: 9, fade: 7 },      // RAUL letters
   { x: -8, z: 20, r: 7, fade: 6 },      // seesaw
@@ -6938,90 +6941,465 @@ class Game {
     }
   }
 
-  /* ============ central plaza ============ */
+  /* ============ central plaza — the lobby ============
+
+     This is the first thing anyone sees, so it is the one part of the island
+     built like a place rather than scattered with props. A paved circle with
+     a kerb, a tiered fountain carrying the island's cat deity, a ring of
+     standing stones that name the seven temples and point down their roads,
+     and enough benches and topiary that the space between them is furnished.
+
+     Everything is composed from the primitives this build still has — no
+     lathe, no extrude, no loader, no mesh file to load. Anything that reads
+     as a curve is a stack of cylinders; anything that reads as carving is
+     drawn into a canvas and used as a map. */
   buildPlaza() {
-    /* mosaic floor */
-    const tex = this.makeCanvas(512, 512, g => {
-      g.fillStyle = "#232028"; g.fillRect(0, 0, 512, 512);
-      const cols = ["#2b2732", "#332d3b", "#282434", "#3a3342"];
-      for (let i = 0; i < 7; i++) {
-        g.strokeStyle = cols[i % cols.length];
-        g.lineWidth = 26;
-        g.beginPath(); g.arc(256, 256, 40 + i * 34, 0, 7); g.stroke();
+    const PAVE_R = 12;
+    /* One stone family for the whole square, and a warm one. The island's rock
+       is a cool purple-grey, and built out of that the whole plaza sank into
+       the dusk as a single navy mass — indistinguishable from the sea behind
+       it and from every prop standing on it. Sandstone reads against both the
+       green of the lawn and the blue of the hour, and it agrees with the amber
+       lamps that light it. detail() supplies the grain, same as the lawn. */
+    const stone = this.detail(this.mat(0x8a7c69, { roughness: .8, metalness: .03 }), 3, .16);
+    const stoneD = this.detail(this.mat(0x5e5548, { roughness: .9 }), 3, .16);
+    const stonePale = this.detail(this.mat(0xa1937c, { roughness: .82 }), 3.4, .15);
+    const bronze = this.mat(0x9c7a44, { roughness: .45, metalness: .5 });
+
+    /* ---- paving ----
+       Drawn at 1024 so the joints stay crisp when you stand on them: at 512 a
+       one-pixel joint line is four centimetres wide on the ground. */
+    const tex = this.makeCanvas(1024, 1024, g => {
+      const C = 512;
+      g.fillStyle = "#3a342b"; g.fillRect(0, 0, 1024, 1024);
+      /* concentric courses of flags, each ring a slightly different stone */
+      const tones = ["#463f33", "#3d372d", "#4e463a", "#413a30", "#524936"];
+      for (let i = 10; i >= 0; i--) {
+        g.fillStyle = tones[i % tones.length];
+        g.beginPath(); g.arc(C, C, 46 + i * 44, 0, 7); g.fill();
       }
-      g.fillStyle = "#7fdca8";
-      for (let i = 0; i < 8; i++) {
-        const a = i / 8 * Math.PI * 2;
-        g.beginPath(); g.arc(256 + Math.cos(a) * 210, 256 + Math.sin(a) * 210, 9, 0, 7); g.fill();
+      /* joints: radial every 7.5°, staggered course to course so the pattern
+         never lines up into spokes */
+      g.strokeStyle = "rgba(24,19,12,.72)"; g.lineWidth = 3;
+      for (let i = 0; i <= 10; i++) {
+        const r0 = 46 + i * 44, r1 = r0 + 44;
+        g.beginPath(); g.arc(C, C, r0, 0, 7); g.stroke();
+        const n = 24 + i * 4, off = (i % 2) * Math.PI / n;
+        for (let k = 0; k < n; k++) {
+          const a = k / n * Math.PI * 2 + off;
+          g.beginPath();
+          g.moveTo(C + Math.cos(a) * r0, C + Math.sin(a) * r0);
+          g.lineTo(C + Math.cos(a) * r1, C + Math.sin(a) * r1);
+          g.stroke();
+        }
+      }
+      /* a bronze compass band, mostly hidden by the fountain but it catches
+         the light where it runs out past the basin */
+      g.strokeStyle = "#8a6c3e"; g.lineWidth = 7;
+      g.beginPath(); g.arc(C, C, 300, 0, 7); g.stroke();
+      g.lineWidth = 3;
+      g.beginPath(); g.arc(C, C, 318, 0, 7); g.stroke();
+      for (let k = 0; k < 16; k++) {
+        const a = k / 16 * Math.PI * 2, long = k % 4 === 0;
+        g.lineWidth = long ? 9 : 4;
+        g.beginPath();
+        g.moveTo(C + Math.cos(a) * 300, C + Math.sin(a) * 300);
+        g.lineTo(C + Math.cos(a) * (long ? 356 : 330), C + Math.sin(a) * (long ? 356 : 330));
+        g.stroke();
+      }
+      /* weathering: dark blotches so the flags are not all the same age */
+      for (let i = 0; i < 220; i++) {
+        const a = Math.random() * 7, r = Math.random() * 500;
+        g.fillStyle = `rgba(20,15,9,${.03 + Math.random() * .07})`;
+        g.beginPath();
+        g.arc(C + Math.cos(a) * r, C + Math.sin(a) * r, 6 + Math.random() * 26, 0, 7);
+        g.fill();
       }
     });
-    this.m(new CircleGeo(11, 40), new StdMat({ map: tex, roughness: .8 }), 0, .06, 0,
+    this.m(new CircleGeo(PAVE_R, 72), new StdMat({ map: tex, roughness: .84 }), 0, .06, 0,
+      { rx: -Math.PI / 2, cast: false, recv: true });
+    /* Kerb, laid flush. A raised one would be the right look and the wrong
+       thing entirely: the cat rides heightAt(), which is flat here, so a step
+       with real height is a step it walks straight through. */
+    this.m(new RingGeo(PAVE_R, PAVE_R + .8, 72), this.mat(0x6d6354, { roughness: .92 }), 0, .05, 0,
       { rx: -Math.PI / 2, cast: false, recv: true });
 
-    /* central fountain */
-    const F = new Grp(); this.scene.add(F);
-    this.m(new CylGeo(3.2, 3.6, .8, 20), this.mat(0x4a4557, { roughness: .7 }), 0, .4, 0, { parent: F, recv: true });
-    this.m(new CylGeo(2.6, 2.8, .5, 20), this.mat(0x123650, { roughness: .1, metalness: .6 }), 0, .85, 0, { parent: F, cast: false });
-    this.m(new CylGeo(.45, .6, 2.4, 10), this.mat(0x555066, { roughness: .7 }), 0, 1.6, 0, { parent: F });
-    const bowl = this.m(new CylGeo(1.15, .8, .5, 14), this.mat(0x4a4557, { roughness: .7 }), 0, 2.9, 0, { parent: F });
-    /* cat statue on top — the island's deity */
-    const statue = new Grp(); statue.position.y = 3.3; F.add(statue);
-    const stone = this.mat(0x6a6478, { roughness: .6, metalness: .1 });
-    this.m(new BoxGeo(.55, .5, .8), stone, 0, .3, 0, { parent: statue });
-    this.m(new BoxGeo(.42, .4, .38), stone, 0, .75, .25, { parent: statue });
-    this.m(new ConeGeo(.12, .25, 4), stone, -.14, 1.02, .25, { parent: statue });
-    this.m(new ConeGeo(.12, .25, 4), stone, .14, 1.02, .25, { parent: statue });
-    this.m(new CylGeo(.07, .09, .8, 6), stone, 0, .45, -.5, { parent: statue, rx: .9 });
-    this.anims.push(t => { statue.rotation.y = t * .25; });
-    this.scyl(3.6, 4.2, 0, 2.1, 0);
-    /* fountain water jets: particle spray */
-    const drops = 40;
-    const geo = new BufGeo();
-    const arr = new Float32Array(drops * 3);
-    geo.setAttribute("position", new F32Attr(arr, 3));
-    const pts = new Points3(geo, new PointsMat({ color: 0x9fd8ff, size: .32, map: this.radialTexture(), transparent: true, opacity: .85, depthWrite: false, blending: BLEND_ADD }));
-    this.scene.add(pts);
-    this.anims.push(t => {
-      const a = pts.geometry.attributes.position.array;
-      for (let i = 0; i < drops; i++) {
-        const ph = (t * 1.1 + i / drops) % 1;
-        const ang = i * 2.399;
-        const r = .3 + ph * 1.9;
-        a[i * 3] = Math.cos(ang) * r;
-        a[i * 3 + 1] = 3.6 + Math.sin(ph * Math.PI) * 1.7 - ph * .8;
-        a[i * 3 + 2] = Math.sin(ang) * r;
-      }
-      pts.geometry.attributes.position.needsUpdate = true;
-    });
-    this.scene.add(this.glowSprite(0x7fdca8, 4.4, new V3(0, 4.4, 0)));
-    this.addLight(0, 4.6, 0, 0x7fdca8, 9, 26);
+    /* ---- the roads out, and a bronze marker inlaid at each mouth ----
+       Eight ways leave this square and until now nothing on the ground said
+       so. Each strip is the colour of what it leads to. */
+    const roads = ZONE_POS.map((p, i) => ({ a: Math.atan2(p.x, p.z), col: ZONES_META[i].color, i }));
+    roads.push({ a: Math.atan2(BRIDGE_A.x, BRIDGE_A.z), col: CYAN, i: -1 });
+    for (const r of roads) {
+      const bx = Math.sin(r.a), bz = Math.cos(r.a);
+      const c = new Col(r.col);
+      /* Inlay, not signage. A full-colour plate lying flat under five lamps is
+         a lit surface facing straight up: whatever colour you give it, it
+         comes back as a bright card dropped on the floor. So the plate is dark
+         bronze and only a narrow bar down the middle of it carries the colour,
+         which is also how a real inlaid strip would catch your eye. */
+      this.m(new BoxGeo(.72, .05, 1.7), this.mat(0x3f3a31, { roughness: .95 }),
+        bx * 10.5, .08, bz * 10.5, { ry: r.a, cast: false, recv: true });
+      /* No emissive at all on the bar. Anything self-lit and horizontal here
+         clears the bloom threshold and comes back as a strip light embedded in
+         the floor; a matte coloured stone under five lamps is bright enough. */
+      this.m(new BoxGeo(.2, .06, 1.42), this.mat(c, { roughness: .92 }),
+        bx * 10.5, .095, bz * 10.5, { ry: r.a, cast: false });
+      /* a chevron of two smaller studs, pointing the way */
+      for (const k of [0, 1])
+        this.m(new BoxGeo(.22, .05, .22), bronze, bx * (11.35 + k * .42) + bz * (k ? .2 : -.2),
+          .08, bz * (11.35 + k * .42) - bx * (k ? .2 : -.2), { ry: r.a, cast: false, recv: true });
+    }
 
-    /* physics letters R A U L — crash into them, bruno-simon style */
-    const letterCols = [0x7fdca8, 0xe8b06a, 0x8fb0ff, 0xf2a2c4];
+    /* ---- fountain ---- */
+    this.fountain(stone, stoneD, stonePale, bronze);
+
+    /* ---- the ring of standing stones ----
+       One per temple, set a little to the left of its road so it flanks the
+       way out instead of blocking it, turned to face the middle of the square.
+       An eighth marks the road to the bridge and the caves. */
+    const OFF = .23;                     // radians off the road centre ≈ 3.2 m out here
+    for (const r of roads) {
+      const a = r.a + OFF, R = 13.9;
+      const name = r.i >= 0 ? ZONES_META[r.i].name[state.lang] || ZONES_META[r.i].name.es
+                            : (state.lang === "es" ? "Cuevas de Cristal" : "Crystal Caves");
+      this.stele(Math.sin(a) * R, Math.cos(a) * R, a + Math.PI, r.col, name);
+    }
+
+    /* ---- lamps, benches, topiary ----
+       The lamps used to sit on a fixed five-fold ring, which put some of them
+       square in the mouth of a road. They now stand in the widest gaps between
+       roads, which is both tidier and the reason the roads read as roads. */
+    const bearings = roads.map(r => r.a).sort((p, q) => p - q);
+    const gaps = bearings.map((b, i) => {
+      const nxt = i === bearings.length - 1 ? bearings[0] + Math.PI * 2 : bearings[i + 1];
+      return { mid: (b + nxt) / 2, size: nxt - b };
+    }).sort((p, q) => q.size - p.size);
+    for (const gp of gaps.slice(0, 5))
+      this.lampPost(Math.sin(gp.mid) * 13.4, Math.cos(gp.mid) * 13.4);
+    /* Bench and planter both dead centre of the gap. Offsetting the planter
+       by a fixed angle put one of them in the mouth of the road you spawn
+       facing — the gaps are not all the same width, so "a bit to the side"
+       means something different at each one. */
+    if (!IS_TOUCH)
+      for (const gp of gaps.slice(0, 4)) {
+        this.bench(Math.sin(gp.mid) * 8.4, Math.cos(gp.mid) * 8.4, gp.mid + Math.PI, stone, stoneD);
+        this.planter(Math.sin(gp.mid) * 11.4, Math.cos(gp.mid) * 11.4, stoneD);
+      }
+    /* the corner the crate pyramid used to occupy */
+    this.planter(-14.6, -11.4, stoneD);
+    this.bench(-12.2, -14.2, 2.3, stone, stoneD);
+
+    /* ---- physics letters R A U L ----
+       Bruno-Simon style: they are the one thing in the square you are allowed
+       to knock over, so they sit on the paving where you will hit them rather
+       than dropped from six metres onto the grass behind it. */
+    const letterCols = [GREEN, AMBER, BLUE, PINK];
     "RAUL".split("").forEach((ch, i) => {
-      const tex2 = this.makeCanvas(128, 128, g => {
-        g.fillStyle = "#14161c"; g.fillRect(0, 0, 128, 128);
-        g.font = '700 92px "Space Grotesk", sans-serif';
+      const tex2 = this.makeCanvas(256, 256, g => {
+        g.fillStyle = "#22202a"; g.fillRect(0, 0, 256, 256);
+        g.strokeStyle = "#3a3648"; g.lineWidth = 10; g.strokeRect(5, 5, 246, 246);
+        g.font = '700 184px "Space Grotesk", sans-serif';
         g.textAlign = "center"; g.textBaseline = "middle";
-        g.fillStyle = "#" + new Col(letterCols[i]).getHexString();
-        g.fillText(ch, 64, 70);
+        g.shadowColor = letterCols[i]; g.shadowBlur = 26;
+        g.fillStyle = letterCols[i];
+        g.fillText(ch, 128, 140);
       });
-      const mesh = this.m(new BoxGeo(2, 2, 2), new StdMat({ map: tex2, roughness: .6 }),
-        -6 + i * 4, 6, -16, { recv: true });
+      const x = -4.5 + i * 3, z = -15.5;
+      const mesh = this.m(new BoxGeo(1.8, 1.8, 1.8),
+        new StdMat({ map: tex2, roughness: .55, metalness: .1 }), x, 2.4, z, { recv: true });
       const body = new CBody({ mass: 2.5 });
-      body.addShape(new CBox(new CVec(1, 1, 1)));
-      body.position.set(-6 + i * 4, 6 + i * .5, -16);
+      body.addShape(new CBox(new CVec(.9, .9, .9)));
+      body.position.set(x, 1.6 + i * .35, z);
       body.quaternion.setFromEuler(0, (Math.random() - .5) * .4, 0);
       this.world.addBody(body);
       this.sync.push({ mesh, body });
     });
+  }
 
-    /* Lamp posts ring the plaza. The angle offset keeps one off the +Z axis,
-       where it would stand between the spawn camera and the cat. */
-    for (let i = 0; i < 5; i++) {
-      const a = i / 5 * Math.PI * 2 + .95;
-      this.lampPost(Math.cos(a) * 13.5, Math.sin(a) * 13.5);
+  /* ---- the fountain ----
+     Three tiers, because one basin at one height is a birdbath and the thing
+     has to hold the eye from across the square. Water is a plain disc with
+     ripple rings crawling outward over it: with no environment map to reflect
+     there is nothing to gain from a fancier surface, and the movement is what
+     sells it anyway. */
+  fountain(stone, stoneD, stonePale, bronze) {
+    const F = new Grp(); this.scene.add(F);
+    const water = this.mat(0x11405e, { roughness: .16, metalness: .35 });
+
+    /* Lower basin. Kept under four metres across: at the five and a half it
+       started at, the fountain was two thirds the width of the paving and the
+       square read as a pond with a path round it. */
+    this.m(new CylGeo(3.6, 3.9, .3, 40), stonePale, 0, .15, 0, { parent: F, recv: true });
+    this.m(new CylGeo(3.2, 3.34, .82, 40), stone, 0, .7, 0, { parent: F, recv: true });
+    this.m(new TorusGeo(3.28, .16, 8, 40), stonePale, 0, 1.08, 0, { parent: F, rx: Math.PI / 2 });
+    this.m(new CircleGeo(3.16, 40), water, 0, .88, 0, { parent: F, rx: -Math.PI / 2, cast: false });
+    /* scalloped apron: twelve blocks stepped out around the wall, which is
+       what stops a plain cylinder reading as a bucket */
+    for (let i = 0; i < 12; i++) {
+      const a = i / 12 * Math.PI * 2;
+      this.m(new BoxGeo(.6, .54, .3), stoneD,
+        Math.cos(a) * 3.4, .54, Math.sin(a) * 3.4, { parent: F, ry: -a, recv: true });
     }
+
+    /* stem and upper bowl */
+    this.m(new CylGeo(.72, 1, .5, 16), stone, 0, 1.1, 0, { parent: F, recv: true });
+    this.m(new CylGeo(.42, .58, 1.2, 12), stone, 0, 1.9, 0, { parent: F });
+    this.m(new TorusGeo(.5, .085, 6, 16), bronze, 0, 1.7, 0, { parent: F, rx: Math.PI / 2 });
+    this.m(new CylGeo(1.45, .82, .42, 24), stone, 0, 2.68, 0, { parent: F, recv: true });
+    this.m(new TorusGeo(1.45, .11, 8, 28), stonePale, 0, 2.87, 0, { parent: F, rx: Math.PI / 2 });
+    this.m(new CircleGeo(1.37, 24), water, 0, 2.85, 0, { parent: F, rx: -Math.PI / 2, cast: false });
+
+    /* four spouts, and the sheets of water falling off them */
+    const sheet = new StdMat({ color: 0xbfe6ff, transparent: true, opacity: .3,
+                               roughness: .1, depthWrite: false });
+    for (let i = 0; i < 4; i++) {
+      const a = i / 4 * Math.PI * 2 + Math.PI / 4;
+      const sx = Math.cos(a), sz = Math.sin(a);
+      this.m(new CylGeo(.11, .14, .42, 8), bronze, sx * 1.38, 2.78, sz * 1.38,
+        { parent: F, rz: Math.PI / 2, ry: -a });
+      const fall = this.m(new BoxGeo(.28, 1.85, .05), sheet, sx * 1.5, 1.85, sz * 1.5,
+        { parent: F, ry: -a, cast: false });
+      this.anims.push(t => {
+        fall.scale.y = 1 + Math.sin(t * 3.1 + i) * .06;
+        fall.material.opacity = .26 + Math.sin(t * 2.3 + i * 1.7) * .05;
+      });
+    }
+
+    /* ripples on the lower basin: three rings crawling out and fading, which
+       is cheaper and reads better than displacing a 48-segment disc */
+    for (let i = 0; i < 3; i++) {
+      const ring = this.m(new RingGeo(.5, .74, 40), new BasicMat({
+        color: 0xa8dcff, transparent: true, opacity: .3, depthWrite: false, blending: BLEND_ADD }),
+        0, .9, 0, { parent: F, rx: -Math.PI / 2, cast: false });
+      this.anims.push(t => {
+        const ph = ((t * .42 + i / 3) % 1);
+        const s = .8 + ph * 3.4;
+        ring.scale.set(s, s, 1);
+        ring.material.opacity = .34 * (1 - ph) * Math.min(1, ph * 5);
+      });
+    }
+
+    /* The deity, scaled up rather than the fountain scaled down around it:
+       from across the square the statue is the thing you should be able to
+       name, and at native size on a shrunk bowl it read as an ornament. */
+    const statue = this.catStatue();
+    statue.position.y = 3.06;
+    statue.scale.setScalar(1.34);
+    F.add(statue);
+
+    /* Lit from below like a monument, not from a lantern hung over its head.
+       The old rig had a 4.4-unit green sprite parked at the statue's shoulder,
+       which is exactly where it stops being a statue and becomes a blob. */
+    this.addLight(0, 2.2, 0, 0x7fdca8, 5, 20);
+    F.add(this.glowSprite(0x7fdca8, 1.7, new V3(0, 3.1, 0)));
+
+    /* spray, arcing off the upper bowl into the basin */
+    const drops = IS_TOUCH ? 22 : 44;
+    const geo = new BufGeo();
+    geo.setAttribute("position", new F32Attr(new Float32Array(drops * 3), 3));
+    const pts = new Points3(geo, new PointsMat({ color: 0x9fd8ff, size: .26,
+      map: this.radialTexture(), transparent: true, opacity: .8, depthWrite: false, blending: BLEND_ADD }));
+    this.scene.add(pts);
+    this.anims.push(t => {
+      const a = pts.geometry.attributes.position.array;
+      for (let i = 0; i < drops; i++) {
+        const ph = (t * .9 + i / drops) % 1;
+        const ang = i * 2.399;
+        const r = 1.35 + ph * 1.7;                      // outward as it falls
+        a[i * 3] = Math.cos(ang) * r;
+        a[i * 3 + 1] = 3.15 + Math.sin(ph * 2.1) * .9 - ph * ph * 2.9;
+        a[i * 3 + 2] = Math.sin(ang) * r;
+      }
+      pts.geometry.attributes.position.needsUpdate = true;
+    });
+
+    this.scyl(3.6, 4, 0, 2, 0);
+    this.addOccluder(0, 2.6, 0, 2.6);
+  }
+
+  /* ---- the cat deity ----
+     A seated cat in stone, about two metres of it. Built the way you would
+     rough one out of a block: haunches, chest, head, then the details that
+     make it a cat rather than a bear — the ear cones, the muzzle, the tail
+     curled round the base. Twenty-odd primitives, which is a lot for one prop
+     and the right amount for the thing at the centre of the first screen.
+
+     The eyes are emissive and they pulse. That is the whole trick that keeps
+     a grey statue from disappearing into a grey fountain at dusk. */
+  catStatue() {
+    const G = new Grp();
+    /* Paler and warmer than the fountain it stands on, deliberately: carved
+       from the same block it disappeared into the basin at any distance, and
+       the one thing in the square that has to read from the far kerb is this. */
+    const stone = this.mat(0xb9ac93, { roughness: .58, metalness: .06, flatShading: false });
+    const stoneW = this.mat(0x9c907a, { roughness: .68 });
+    const gold = this.mat(0xc9a24a, { roughness: .3, metalness: .7 });
+
+    /* pedestal */
+    this.m(new CylGeo(1.05, 1.2, .22, 20), stoneW, 0, -.75, 0, { parent: G, recv: true });
+    this.m(new CylGeo(.92, .95, .42, 20), stone, 0, -.43, 0, { parent: G, recv: true });
+    this.m(new TorusGeo(.93, .07, 6, 24), stoneW, 0, -.22, 0, { parent: G, rx: Math.PI / 2 });
+
+    /* haunches and rump — one squashed sphere does the whole seated mass */
+    const rump = this.m(new SphGeo(.62, 18, 14), stone, 0, .34, -.12, { parent: G, recv: true });
+    rump.scale.set(1, .82, 1.15);
+    for (const s of [-1, 1]) {
+      const thigh = this.m(new SphGeo(.3, 14, 10), stone, s * .42, .2, .14, { parent: G, recv: true });
+      thigh.scale.set(.8, .78, 1.35);
+      this.m(new SphGeo(.15, 12, 8), stone, s * .4, .1, .58, { parent: G });   // hind paw
+    }
+
+    /* chest, tapering up out of the rump */
+    this.m(new CylGeo(.29, .46, .82, 16), stone, 0, .82, .1, { parent: G, recv: true });
+    const chest = this.m(new SphGeo(.31, 16, 12), stone, 0, .78, .26, { parent: G });
+    chest.scale.set(1, 1.1, .85);
+
+    /* forelegs, straight down to the plinth the way a seated cat holds them */
+    for (const s of [-1, 1]) {
+      this.m(new CylGeo(.095, .12, .84, 10), stone, s * .2, .38, .38, { parent: G });
+      const paw = this.m(new SphGeo(.135, 12, 8), stone, s * .2, .0, .46, { parent: G, recv: true });
+      paw.scale.set(1, .7, 1.3);
+    }
+
+    /* head */
+    const head = this.m(new SphGeo(.36, 18, 14), stone, 0, 1.42, .12, { parent: G });
+    head.scale.set(1, .94, .98);
+    const muzzle = this.m(new SphGeo(.19, 14, 10), stone, 0, 1.32, .38, { parent: G });
+    muzzle.scale.set(1.2, .82, .95);
+    /* The face has to survive being ten metres away and two metres up. At the
+       size a real cat's features are it came out as a blank pale egg, so the
+       nose, the inner ears and the eyes are all cut deeper and darker than
+       anatomy would have them — this is a carving, and carvings exaggerate. */
+    const shade = this.mat(0x6b5f4c, { roughness: .8 });
+    this.m(new ConeGeo(.08, .1, 4), shade, 0, 1.37, .54, { parent: G, rx: -Math.PI / 2 });
+    for (const s of [-1, 1]) {
+      this.m(new ConeGeo(.17, .36, 5), stone, s * .21, 1.8, .08, { parent: G, rz: s * .16 });
+      this.m(new ConeGeo(.1, .24, 5), shade, s * .21, 1.76, .15, { parent: G, rz: s * .16 });
+      this.m(new BoxGeo(.13, .035, .04), shade, s * .075, 1.28, .52, { parent: G, rz: -s * .3, cast: false });
+    }
+    const eyeMat = new StdMat({ color: 0xbdfbf0, emissive: new Col(CYAN),
+                                emissiveIntensity: 1.5, roughness: .22 });
+    const eyes = [];
+    for (const s of [-1, 1]) {
+      /* a socket behind each eye: without it the eye is a bright bead sitting
+         on the surface instead of set into the head */
+      this.m(new SphGeo(.105, 10, 8), shade, s * .14, 1.47, .32, { parent: G, cast: false });
+      const e = this.m(new SphGeo(.082, 10, 8), eyeMat, s * .14, 1.47, .36, { parent: G, cast: false });
+      e.scale.set(1, 1.3, .75);
+      eyes.push(e);
+    }
+    /* whisker studs, so the muzzle is not a blank lump */
+    for (const s of [-1, 1])
+      for (let k = 0; k < 3; k++)
+        this.m(new SphGeo(.018, 6, 5), stoneW, s * (.1 + k * .03), 1.3 - k * .035, .5,
+          { parent: G, cast: false });
+
+    /* collar with a bell — the one warm thing on it */
+    this.m(new TorusGeo(.28, .045, 6, 20), gold, 0, 1.12, .16, { parent: G, rx: Math.PI / 2 - .18 });
+    this.m(new SphGeo(.075, 10, 8), gold, 0, 1.0, .36, { parent: G });
+
+    /* tail, curled round the right of the base: nine shrinking beads on an
+       arc, which is the only way to get a curve with no lathe and no tube */
+    for (let i = 0; i < 9; i++) {
+      const t = i / 8;
+      const a = -.5 + t * 2.5;
+      const r = .62 + t * .26;
+      this.m(new SphGeo(.115 - t * .045, 10, 8), stone,
+        Math.sin(a) * r * .95, .1 + t * t * .5, Math.cos(a) * r * .8 - .1, { parent: G });
+    }
+
+    this.anims.push(t => {
+      eyeMat.emissiveIntensity = 1.25 + Math.sin(t * 1.35) * .5;
+      /* and every nine seconds or so, a blink */
+      for (const e of eyes) e.scale.y = 1.3 * (1 - Math.max(0, Math.sin(t * .7 + 1.2) - .96) * 22);
+    });
+    return G;
+  }
+
+  /* ---- standing stone ----
+     A marker per road. It carries the temple's colour in an inset panel and
+     its name cut into the face, so the square explains its own exits instead
+     of leaving you to walk down all eight and find out. */
+  stele(x, z, ry, color, name) {
+    const G = new Grp(); G.position.set(x, 0, z); G.rotation.y = ry; this.scene.add(G);
+    /* eight of these get built; one pair of materials between them, or the
+       square alone accounts for sixteen identical standard materials */
+    if (!this.steleMats) this.steleMats = {
+      rock: this.detail(this.mat(0x6b6153, { roughness: .9, flatShading: true }), 2.6, .2),
+      rockD: this.mat(0x4e463c, { roughness: .95, flatShading: true })
+    };
+    const { rock, rockD } = this.steleMats;
+
+    /* Eight of these stand round a twelve-metre square, so a centimetre of
+       extra girth is eight more centimetres of blocked view. Kept under three
+       metres and narrow enough to see the roads between them. */
+    this.m(new CylGeo(.74, .88, .3, 6), rockD, 0, .15, 0, { parent: G, recv: true });
+    this.m(new CylGeo(.4, .56, 2.15, 6), rock, 0, 1.35, 0, { parent: G, recv: true });
+    this.m(new ConeGeo(.5, .46, 6), rock, 0, 2.62, 0, { parent: G });
+    /* two shoulders so the shaft is not a plain post */
+    for (const s of [-1, 1])
+      this.m(new BoxGeo(.2, .44, .2), rockD, s * .42, 2.05, 0, { parent: G, rz: s * .3 });
+
+    const c = new Col(color);
+    /* the inset: recessed panel, glowing bar, name cut under it */
+    this.m(new BoxGeo(.68, 1.3, .09), rockD, 0, 1.5, .36, { parent: G, recv: true });
+    this.m(new BoxGeo(.44, .44, .07), new StdMat({ color: c, emissive: c,
+      emissiveIntensity: 1.15, roughness: .3 }), 0, 1.82, .42, { parent: G, cast: false });
+    const plate = this.makeCanvas(256, 128, g => {
+      g.fillStyle = "#3a3546"; g.fillRect(0, 0, 256, 128);
+      g.font = '700 30px "Space Grotesk", sans-serif';
+      g.textAlign = "center"; g.textBaseline = "middle";
+      /* two lines if the name is long — "Templo de la Evolución" on one line
+         at this width comes out four pixels tall and unreadable */
+      const words = name.split(" ");
+      const lines = [];
+      let cur = "";
+      for (const w of words) {
+        if ((cur + " " + w).trim().length > 13) { lines.push(cur.trim()); cur = w; }
+        else cur += " " + w;
+      }
+      lines.push(cur.trim());
+      const use = lines.slice(0, 3);
+      g.fillStyle = "#" + c.getHexString();
+      use.forEach((ln, i) => g.fillText(ln, 128, 64 + (i - (use.length - 1) / 2) * 34));
+    });
+    this.m(new PlaneGeo(.6, .3), new BasicMat({ map: plate, transparent: true }),
+      0, 1.24, .43, { parent: G, cast: false });
+
+    G.add(this.glowSprite(color, 1.3, new V3(0, 1.82, .48)));
+    this.scyl(.55, 2.8, x, 1.4, z);
+    this.addOccluder(x, 1.6, z, .72);
+  }
+
+  /* ---- stone bench ---- */
+  bench(x, z, ry, stone, stoneD) {
+    const G = new Grp(); G.position.set(x, 0, z); G.rotation.y = ry; this.scene.add(G);
+    for (const s of [-1, 1])
+      this.m(new BoxGeo(.34, .44, .78), stoneD, s * .95, .22, 0, { parent: G, recv: true });
+    this.m(new BoxGeo(2.6, .18, .86), stone, 0, .53, 0, { parent: G, recv: true });
+    this.m(new BoxGeo(2.6, .07, .12), stone, 0, .63, -.37, { parent: G });   // lip
+    /* backrest, leaned back a touch so it is a bench and not a shelf */
+    this.m(new BoxGeo(2.5, .5, .12), stone, 0, .92, -.4, { parent: G, rx: -.16, recv: true });
+    this.sbox(2.6, .7, .9, x, .35, z, ry);
+    this.addOccluder(x, .6, z, 1.2);
+  }
+
+  /* ---- planter with topiary ----
+     The foliage goes through foliageMat so it picks up the same wind as the
+     trees; a clipped ball that stands dead still next to swaying pines is the
+     kind of thing you notice without knowing why. */
+  planter(x, z, stoneD) {
+    const G = new Grp(); G.position.set(x, 0, z); this.scene.add(G);
+    this.m(new CylGeo(.86, .68, .78, 12), stoneD, 0, .39, 0, { parent: G, recv: true });
+    this.m(new TorusGeo(.86, .08, 6, 16), stoneD, 0, .76, 0, { parent: G, rx: Math.PI / 2 });
+    this.m(new CircleGeo(.8, 12), this.mat(0x3a3026, { roughness: 1 }), 0, .77, 0,
+      { parent: G, rx: -Math.PI / 2, cast: false });
+    this.m(new CylGeo(.09, .11, .5, 6), this.mat(0x4a3324, { roughness: 1 }), 0, 1, 0, { parent: G });
+    const ball = this.m(new IcoGeo(.72, 1), this.foliageMat(0x2f6b3c), 0, 1.72, 0, { parent: G, recv: true });
+    ball.scale.set(1, .88, 1);
+    this.m(new IcoGeo(.42, 1), this.foliageMat(0x3a7d4a), .18, 2.32, -.1, { parent: G });
+    this.scyl(.88, 1, x, .5, z);
+    this.addOccluder(x, 1.6, z, 1);
   }
 
   lampPost(x, z) {
@@ -7037,31 +7415,111 @@ class Game {
   }
 
   /* ============ physics playground near plaza ============ */
+
+  /* One crate texture for every crate on the island. Planks, end grain, iron
+     corner straps and a stencil, drawn once — a mesh per plank would be eight
+     draw calls apiece for something you are meant to knock over, not study. */
+  crateTexture() {
+    if (this._crateTex) return this._crateTex;
+    this._crateTex = this.makeCanvas(256, 256, g => {
+      g.fillStyle = "#7a4f24"; g.fillRect(0, 0, 256, 256);
+      for (let i = 0; i < 5; i++) {                       // planks
+        const y = i * 51;
+        g.fillStyle = ["#8a5a2b", "#7a4f24", "#936133", "#6d4620", "#845629"][i];
+        g.fillRect(0, y + 2, 256, 47);
+        g.strokeStyle = "rgba(40,24,10,.55)"; g.lineWidth = 3;
+        g.beginPath(); g.moveTo(0, y); g.lineTo(256, y); g.stroke();
+        for (let k = 0; k < 7; k++) {                     // grain
+          g.strokeStyle = `rgba(60,36,14,${.10 + Math.random() * .16})`;
+          g.lineWidth = 1 + Math.random();
+          g.beginPath();
+          const gy = y + 6 + Math.random() * 38;
+          g.moveTo(0, gy);
+          g.bezierCurveTo(80, gy + (Math.random() - .5) * 9, 170, gy + (Math.random() - .5) * 9, 256, gy);
+          g.stroke();
+        }
+      }
+      g.fillStyle = "#3b3540";                            // iron straps
+      g.fillRect(0, 0, 18, 256); g.fillRect(238, 0, 18, 256);
+      g.fillStyle = "#4a4450";
+      for (let i = 0; i < 6; i++) { g.fillRect(4, 18 + i * 42, 10, 10); g.fillRect(242, 18 + i * 42, 10, 10); }
+      g.strokeStyle = "rgba(20,14,8,.5)"; g.lineWidth = 6;
+      g.strokeRect(3, 3, 250, 250);
+      g.save();                                           // stencil
+      g.translate(128, 132); g.rotate(-.05);
+      g.globalAlpha = .5; g.fillStyle = "#d8cdb6";
+      g.font = '700 40px "JetBrains Mono", monospace';
+      g.textAlign = "center"; g.textBaseline = "middle";
+      g.fillText("RJA", 0, 0);
+      g.font = '700 17px "JetBrains Mono", monospace';
+      g.fillText("FRAGIL", 0, 30);
+      g.restore();
+    });
+    return this._crateTex;
+  }
+
   buildPlayground() {
-    /* crate pyramids */
-    const crateCols = [0x8a5a2b, 0x7a4f24, 0x936133];
+    /* ---- crate pyramids ---- */
+    const crateMat = new StdMat({ map: this.crateTexture(), roughness: .92 });
+    const crate = (x, y, z, s) => {
+      const mesh = this.m(new BoxGeo(s, s, s), crateMat, x, y, z, { recv: true });
+      const body = new CBody({ mass: 1.8 });
+      body.addShape(new CBox(new CVec(s / 2, s / 2, s / 2)));
+      body.position.set(x, y, z);
+      body.quaternion.setFromEuler(0, (Math.random() - .5) * .12, 0);
+      this.world.addBody(body);
+      this.sync.push({ mesh, body });
+    };
     const pyramid = (px, pz, n) => {
       for (let r = 0; r < n; r++)
         for (let c = 0; c < n - r; c++)
-          this.dbox(1.3, 1.3, 1.3, px + (c - (n - r - 1) / 2) * 1.36, .68 + r * 1.33, pz,
-            crateCols[(r + c) % 3], 1.8);
+          crate(px + (c - (n - r - 1) / 2) * 1.36, .68 + r * 1.33, pz, 1.3);
     };
     pyramid(14, 10, 4);
-    pyramid(-13, -11, 3);
+    pyramid(-27, -17, 3);
 
-    /* bowling corner */
+    /* ---- bowling corner ----
+       Turned pins rather than a cone: a shoulder, a neck and a head, on one
+       group synced to a single capsule-ish body. The collider stays the plain
+       cylinder it always was — the shape you knock over should be the shape
+       you can predict, not the silhouette. */
+    const pinMat = this.mat(0xf2efe7, { roughness: .42 });
+    const pinRed = this.mat(0xd6543c, { roughness: .45 });
     for (let i = 0; i < 6; i++) {
       const row = Math.floor(i / 3), col = i % 3;
-      const pin = this.m(new CylGeo(.32, .45, 1.7, 9), this.mat(0xf0ede4, { roughness: .55 }),
-        17 + col * 1.1 - row * .5, .95, -8 - row * 1.1, {});
-      this.m(new CylGeo(.34, .34, .22, 9), this.mat(0xd6543c), 0, .35, 0, { parent: pin });
+      const x = 17 + col * 1.1 - row * .5, z = -8 - row * 1.1;
+      const G = new Grp(); this.scene.add(G);
+      this.m(new CylGeo(.30, .40, .34, 12), pinMat, 0, -.66, 0, { parent: G, recv: true });  // foot
+      this.m(new CylGeo(.20, .30, .62, 12), pinMat, 0, -.18, 0, { parent: G, recv: true });  // belly
+      this.m(new CylGeo(.12, .20, .40, 12), pinMat, 0, .33, 0, { parent: G });               // neck
+      this.m(new SphGeo(.155, 12, 10), pinMat, 0, .62, 0, { parent: G });                    // head
+      this.m(new CylGeo(.163, .163, .1, 12), pinRed, 0, .42, 0, { parent: G });              // collar stripes
+      this.m(new CylGeo(.185, .185, .08, 12), pinRed, 0, .28, 0, { parent: G });
       const body = new CBody({ mass: .7 });
       body.addShape(new CCyl(.33, .45, 1.7, 8));
-      body.position.set(17 + col * 1.1 - row * .5, .95, -8 - row * 1.1);
+      body.position.set(x, .95, z);
       this.world.addBody(body);
-      this.sync.push({ mesh: pin, body });
+      this.sync.push({ mesh: G, body });
     }
-    this.dsphere(.85, 12, 1, -4, 0x2f2b38, 3, { matOpts: { roughness: .3, metalness: .3 } });
+    /* the ball: a marbled bowling ball with finger holes, not a black sphere */
+    const ballTex = this.makeCanvas(256, 128, g => {
+      g.fillStyle = "#241f2e"; g.fillRect(0, 0, 256, 128);
+      for (let i = 0; i < 70; i++) {
+        g.strokeStyle = `rgba(${120 + Math.random() * 90},${90 + Math.random() * 80},${170 + Math.random() * 80},${.05 + Math.random() * .12})`;
+        g.lineWidth = 1 + Math.random() * 7;
+        g.beginPath();
+        const y = Math.random() * 128;
+        g.moveTo(0, y);
+        g.bezierCurveTo(70, y + (Math.random() - .5) * 60, 180, y + (Math.random() - .5) * 60, 256, y);
+        g.stroke();
+      }
+      g.fillStyle = "#0d0b12";
+      for (const [hx, hy] of [[92, 44], [126, 36], [110, 66]]) {
+        g.beginPath(); g.arc(hx, hy, 9, 0, 7); g.fill();
+      }
+    });
+    this.dsphere(.85, 12, 1, -4, 0xffffff, 3,
+      { matOpts: { map: ballTex, roughness: .22, metalness: .25 } });
 
     /* beach ball */
     const ball = this.dsphere(1.15, -14, 2, 14, 0xffffff, .6);
@@ -7078,19 +7536,47 @@ class Game {
         { ry: -Math.cos(i * .5) * .35, matOpts: { roughness: .5 } });
 
     /* seesaw: plank balanced on a wedge (no hinge in bundle, pure physics) */
-    this.m(new ConeGeo(1, 1.4, 4), this.mat(0x6a4a2f, { flatShading: true }), -8, .7, 20, {});
+    const timber = this.mat(0x6a4a2f, { roughness: .95, flatShading: true });
+    this.m(new ConeGeo(1, 1.4, 4), timber, -8, .7, 20, {});
+    /* a pair of braces either side of the wedge, so it reads as built rather
+       than as a cone somebody dropped on the grass */
+    for (const s of [-1, 1])
+      this.m(new BoxGeo(.24, 1.5, .24), timber, -8 + s * .95, .75, 20, { rz: s * .5, recv: true });
     this.sbox(1.4, 1.4, 1.4, -8, .6, 20);
-    this.dbox(7, .3, 1.6, -8, 1.8, 20, 0x9a6a3a, 1.4, { matOpts: { roughness: .8 } });
+    const plank = this.dbox(7, .3, 1.6, -8, 1.8, 20, 0xffffff, 1.4,
+      { matOpts: { map: this.crateTexture(), roughness: .85 } });
+    /* handles at each end: the thing is only fun if you can see which way it
+       tips before you jump on it */
+    for (const s of [-1, 1])
+      this.m(new CylGeo(.07, .07, .5, 6), timber, s * 2.9, .35, 0,
+        { parent: plank.mesh, rz: Math.PI / 2, cast: true });
 
-    /* two ramps */
+    /* ---- two ramps ----
+       Was a bare blue slab. Now a planked deck on stone piers with a kerb rail
+       down each side, which also makes it obvious which end you are meant to
+       hit. The collider is unchanged: one tilted box, as before. */
+    const rampDeck = new StdMat({ map: this.crateTexture(), roughness: .88 });
+    const pier = this.mat(0x4c4757, { roughness: .95, flatShading: true });
     const ramp = (x, z, ry) => {
-      const mesh = this.m(new BoxGeo(8, 1, 5), this.mat(0x3a3f52, { roughness: .7 }), x, .9, z, { recv: true });
+      const G = new Grp(); G.position.set(x, .9, z); this.scene.add(G);
       const body = new CBody({ mass: 0, material: this.groundMat });
       body.addShape(new CBox(new CVec(4, .5, 2.5)));
       body.position.set(x, .9, z);
       body.quaternion.setFromEuler(.34, ry, 0);
-      mesh.quaternion.copy(body.quaternion);
+      G.quaternion.copy(body.quaternion);
       this.world.addBody(body);
+      this.m(new BoxGeo(8, 1, 5), rampDeck, 0, 0, 0, { parent: G, recv: true });
+      for (const s of [-1, 1]) {
+        this.m(new BoxGeo(8, .34, .34), pier, 0, .58, s * 2.4, { parent: G, recv: true });
+        this.m(new CylGeo(.13, .13, .8, 6), pier, -2.6, .9, s * 2.4, { parent: G });
+        this.m(new CylGeo(.13, .13, .8, 6), pier, 2.6, .9, s * 2.4, { parent: G });
+      }
+      /* stone footing under the high end, in world space — inside the tilted
+         group it would lean with the deck and hang in the air */
+      const fx = Math.sin(ry), fz = Math.cos(ry);
+      this.m(new BoxGeo(1.6, 1.6, 5.4), pier, x - fz * 3.2, .45, z + fx * 3.2,
+        { ry, recv: true, cast: false });
+      this.addOccluder(x, 1.2, z, 3.2);
     };
     ramp(24, -2, 0);
     ramp(-26, 2, .5);
