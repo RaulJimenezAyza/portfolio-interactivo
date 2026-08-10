@@ -1,6 +1,9 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
 
+/* app/icon.svg is picked up by Next's file convention and emitted as the
+   <link rel="icon"> — the single-file build carried it as a base64 data URI
+   in its <head>, and porting the body and the CSS left it behind. */
 export const metadata: Metadata = {
   title: "Raúl Jiménez Ayza · La Isla del Gato — portfolio jugable 3D",
   description:

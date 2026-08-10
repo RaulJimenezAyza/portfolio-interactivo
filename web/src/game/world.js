@@ -70,7 +70,7 @@ import {
   Cylinder as CCyl,
   Plane as CPlane
 } from "cannon-es";
-import { getModel, registerFallback } from "../models/load";
+import { getModel, registerFallback, modelSize } from "../models/load";
 
 
 /* ---------- palette ---------- */
@@ -4250,9 +4250,9 @@ class Game {
     }
 
     /* the gate you walk through at the far end */
-    for (const s of [-1, 1])
-      this.m(new CylGeo(.3, .38, 6, 8), paint, s * (PARK_HALF + .6), PARK_Y + 3, L + 2.2, { parent: G, recv: true });
-    this.m(new BoxGeo(PARK_HALF * 2 + 2.4, .9, .5), paint, 0, PARK_Y + 6.2, L + 2.2, { parent: G });
+    const arch = getModel("park-gate");
+    arch.position.set(0, PARK_Y, L + 2.2);
+    G.add(arch);
     const gate = this.makeLabel(state.lang === "es" ? "PARQUE DEL GATO" : "CAT'S FUNFAIR", "#ffd76a", 1.7);
     gate.position.set(0, PARK_Y + 8.2, L + 2.2); G.add(gate);
     for (const s of [-1, 1]) {
@@ -4283,11 +4283,28 @@ class Game {
     const car = at(4, -23);
     this.carousel(car.x, car.z);
 
-    /* kiosks along the midway, because a fair with only rides is a car park */
-    const stallCols = [0xd6543c, 0x3f8f6a, 0x3f6aa8];
-    for (let i = 0; i < 3; i++) {
-      const s = at(16 + i * 5, (i % 2 ? 1 : -1) * (9 + i));
-      this.stall(s.x, s.z, Math.atan2(PARK.x - s.x, PARK.z - s.z), stallCols[i]);
+    /* Kiosks along the midway, because a fair with only rides is a car park.
+       Four different ones now rather than three of the same box in three
+       colours — they come from one kit, so they agree with each other. */
+    const kiosks = ["stall-food", "stall-drinks", "stall-information", "stall-toilets"];
+    kiosks.forEach((key, i) => {
+      const p = at(15 + i * 4.5, (i % 2 ? 1 : -1) * (9 + i * 1.5));
+      this.kiosk(key, p.x, p.z, Math.atan2(PARK.x - p.x, PARK.z - p.z));
+    });
+
+    /* and the small stuff that makes a midway feel walked on rather than
+       laid out: benches facing the rides, bins beside them, flower beds in
+       the gaps */
+    for (let i = 0; i < 6; i++) {
+      const a = i / 6 * Math.PI * 2 + .4;
+      const b = { x: mid.x + Math.cos(a) * 9.5, z: mid.z + Math.sin(a) * 9.5 };
+      const face = Math.atan2(mid.x - b.x, mid.z - b.z);
+      this.parkProp("park-bench", b.x, b.z, face);
+      if (i % 2 === 0) this.parkProp("park-bin", b.x + Math.cos(a + .3) * 1.6, b.z + Math.sin(a + .3) * 1.6, 0);
+    }
+    for (let i = 0; i < 10; i++) {
+      const a = i / 10 * Math.PI * 2 + .9, r = 11 + (i % 3) * 1.8;
+      this.parkProp("park-flowers", mid.x + Math.cos(a) * r, mid.z + Math.sin(a) * r, a);
     }
     /* lamps down the midway */
     for (let i = 0; i < 6; i++) {
@@ -4421,25 +4438,30 @@ class Game {
     });
   }
 
-  /* ---- a kiosk with a striped awning ---- */
-  stall(x, z, ry, col) {
-    const G = new Grp(); G.position.set(x, PARK_Y, z); G.rotation.y = ry;
+  /* ---- a kiosk from the kit ----
+     The hand-built one was a box, a counter and seven alternating awning
+     panels; four of these arrive with more shape than that and, more to the
+     point, they differ from each other. Collider is measured off whatever
+     turned up rather than off the numbers the old box happened to have. */
+  kiosk(key, x, z, ry) {
+    const G = getModel(key);
+    G.position.set(x, PARK_Y, z); G.rotation.y = ry;
     this.scene.add(G); this.outdoorOnly.push(G);
-    const wood = this.mat(0x7a6046, { roughness: .95, flatShading: true });
-    this.m(new BoxGeo(3.4, 2.2, 2.4), wood, 0, 1.1, 0, { parent: G, recv: true });
-    this.m(new BoxGeo(3.8, .3, .5), wood, 0, 2, 1.35, { parent: G });          // counter
-    /* the awning: alternating panels rather than a texture, so the scallop
-       reads at the size these are actually seen from */
-    for (let i = 0; i < 7; i++)
-      this.m(new BoxGeo(.52, .12, 1.7), this.mat(i % 2 ? 0xf2efe7 : col, { roughness: .8 }),
-        -1.56 + i * .52, 2.6, 1.7, { parent: G, rx: .3, cast: false, recv: true });
-    this.m(new BoxGeo(3.6, .5, .12), this.mat(col, { roughness: .8 }), 0, 3.05, .9, { parent: G });
-    for (const s of [-1, 1])
-      this.m(new CylGeo(.07, .07, 2.6, 5), wood, s * 1.6, 1.3, 2.3, { parent: G });
-    this.m(new SphGeo(.22, 10, 8), new StdMat({ color: 0xffd9a0, emissive: new Col(0xffb96a),
-      emissiveIntensity: 1, roughness: .3 }), 0, 2.9, 1.5, { parent: G, cast: false });
-    this.sbox(3.6, 2.4, 2.6, x, PARK_Y + 1.2, z, ry);
-    this.addOccluder(x, PARK_Y + 1.4, z, 2);
+    const size = modelSize(G);
+    this.sbox(size.x, size.y, size.z, x, PARK_Y + size.y / 2, z, ry);
+    this.addOccluder(x, PARK_Y + size.y / 2, z, Math.max(size.x, size.z) * .6);
+    /* a lamp over the counter, so the midway is lit by the stalls on it */
+    this.addLight(x, PARK_Y + size.y + .4, z, 0xffd9a0, 4, 12);
+  }
+
+  /* ---- midway furniture ----
+     No collider: you can walk through a flower bed and the game is better for
+     not stopping you at one. */
+  parkProp(key, x, z, ry) {
+    const G = getModel(key);
+    G.position.set(x, PARK_Y, z); G.rotation.y = ry;
+    this.scene.add(G); this.outdoorOnly.push(G);
+    return G;
   }
 
   buildCoaster() {

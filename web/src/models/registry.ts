@@ -113,8 +113,52 @@ export const MODELS: Record<string, ModelSpec> = {
     file: "lamp.glb", scale: 1, collider: "none",
     note: "Plaza lamp post. Origin at the ground, 3.9m tall. A child named 'bulb' gets the emissive material and the light.",
     fallback: () => new THREE.Group()
+  },
+
+  /* ---- the fairground, from Kenney's Coaster Kit (CC0) ----
+     One kit, so they agree with each other; measured rather than guessed.
+     Every one of them already lands on y=0 and is centred on XZ, which is the
+     folder's convention met without a correction. Only the scale needed
+     setting: the kit is authored small, around 1.5m for a stall. */
+  "park-gate": {
+    file: "park-gate.glb", scale: 2.3, collider: "none",
+    note: "Arch at the end of the boardwalk. Origin on the deck, facing +Z, 2.43m tall before scale.",
+    fallback: () => new THREE.Group()
+  },
+  "stall-food": {
+    file: "stall-food.glb", scale: 1.75, collider: "box",
+    note: "Midway kiosk. Origin on the ground, counter facing +Z, 1.54m tall before scale.",
+    fallback: () => new THREE.Group()
+  },
+  "stall-drinks": {
+    file: "stall-drinks.glb", scale: 1.75, collider: "box",
+    note: "As stall-food.", fallback: () => new THREE.Group()
+  },
+  "stall-information": {
+    file: "stall-information.glb", scale: 1.75, collider: "box",
+    note: "As stall-food.", fallback: () => new THREE.Group()
+  },
+  "stall-toilets": {
+    file: "stall-toilets.glb", scale: 1.75, collider: "box",
+    note: "As stall-food.", fallback: () => new THREE.Group()
+  },
+  "park-bench": {
+    file: "park-bench.glb", scale: 1.8, collider: "none",
+    note: "Midway seat. Origin on the ground, seat facing +Z, 0.49m tall before scale.",
+    fallback: () => new THREE.Group()
+  },
+  "park-bin": {
+    file: "park-bin.glb", scale: 2, collider: "none",
+    note: "Litter bin. Origin on the ground, 0.44m tall before scale.",
+    fallback: () => new THREE.Group()
+  },
+  "park-flowers": {
+    file: "park-flowers.glb", scale: 1.8, collider: "none",
+    note: "Flower bed. Origin on the ground, flat. 0.78m across before scale.",
+    fallback: () => new THREE.Group()
   }
 };
+
 
 /** Scene code calls this at start-up to hand the registry its procedural
  *  builder for a key. Kept out of the ModelSpec literals above so the registry

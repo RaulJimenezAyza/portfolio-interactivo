@@ -11,6 +11,12 @@ const BASE = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
 const loader = new GLTFLoader();
 const cache = new Map<string, Promise<THREE.Object3D>>();
 
+/** Just the dimensions, for the common case: a collider that fits whatever
+ *  turned up rather than what the code was written against. */
+export function modelSize(obj: THREE.Object3D) {
+  return new THREE.Box3().setFromObject(obj).getSize(new THREE.Vector3());
+}
+
 /** Bounding box of an object after its own transforms, used to size a
  *  collider that matches whatever shape actually arrived. */
 export function measure(obj: THREE.Object3D) {
