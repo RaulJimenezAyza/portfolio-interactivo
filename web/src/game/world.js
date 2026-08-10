@@ -2500,6 +2500,8 @@ class Game {
     registerFallback("ferris-wheel", () => this.ferrisWheelModel());
     registerFallback("carousel", () => this.carouselModel());
     registerFallback("cat", () => this.catModel());
+    registerFallback("fountain", () => this.fountainModel(
+      this.plazaMats.stone, this.plazaMats.stoneD, this.plazaMats.stonePale, this.plazaMats.bronze));
 
     this.buildTerrain();
     this.buildPlaza();
@@ -3305,6 +3307,10 @@ class Game {
     const stoneD = this.detail(this.mat(0x5e5548, { roughness: .9 }), 3, .16);
     const stonePale = this.detail(this.mat(0xa1937c, { roughness: .82 }), 3.4, .15);
     const bronze = this.mat(0x9c7a44, { roughness: .45, metalness: .5 });
+    /* the fountain's fallback is registered in the constructor, long before
+       these exist, and closes over this — so they have to be reachable from
+       it by the time anything actually asks for a fountain */
+    this.plazaMats = { stone, stoneD, stonePale, bronze };
 
     /* ---- paving ----
        Drawn at 1024 so the joints stay crisp when you stand on them: at 512 a
@@ -3462,8 +3468,12 @@ class Game {
      ripple rings crawling outward over it: with no environment map to reflect
      there is nothing to gain from a fancier surface, and the movement is what
      sells it anyway. */
-  fountain(stone, stoneD, stonePale, bronze) {
-    const F = new Grp(); this.scene.add(F);
+  /* The masonry and its two sheets of water. Everything that moves — the
+     ripples, the falling sheets, the spray, the deity on top — is hung on
+     afterwards by fountain(), off two named surfaces rather than off numbers,
+     so a taller replacement carries its water level up with it. */
+  fountainModel(stone, stoneD, stonePale, bronze) {
+    const F = new Grp();
     const water = this.mat(0x11405e, { roughness: .16, metalness: .35 });
 
     /* Lower basin. Kept under four metres across: at the five and a half it
@@ -3472,7 +3482,7 @@ class Game {
     this.m(new CylGeo(3.6, 3.9, .3, 40), stonePale, 0, .15, 0, { parent: F, recv: true });
     this.m(new CylGeo(3.2, 3.34, .82, 40), stone, 0, .7, 0, { parent: F, recv: true });
     this.m(new TorusGeo(3.28, .16, 8, 40), stonePale, 0, 1.08, 0, { parent: F, rx: Math.PI / 2 });
-    this.m(new CircleGeo(3.16, 40), water, 0, .88, 0, { parent: F, rx: -Math.PI / 2, cast: false });
+    this.m(new CircleGeo(3.16, 40), water, 0, .88, 0, { parent: F, rx: -Math.PI / 2, cast: false }).name = "waterLow";
     /* scalloped apron: twelve blocks stepped out around the wall, which is
        what stops a plain cylinder reading as a bucket */
     for (let i = 0; i < 12; i++) {
@@ -3487,7 +3497,17 @@ class Game {
     this.m(new TorusGeo(.5, .085, 6, 16), bronze, 0, 1.7, 0, { parent: F, rx: Math.PI / 2 });
     this.m(new CylGeo(1.45, .82, .42, 24), stone, 0, 2.68, 0, { parent: F, recv: true });
     this.m(new TorusGeo(1.45, .11, 8, 28), stonePale, 0, 2.87, 0, { parent: F, rx: Math.PI / 2 });
-    this.m(new CircleGeo(1.37, 24), water, 0, 2.85, 0, { parent: F, rx: -Math.PI / 2, cast: false });
+    this.m(new CircleGeo(1.37, 24), water, 0, 2.85, 0, { parent: F, rx: -Math.PI / 2, cast: false }).name = "waterHigh";
+    return F;
+  }
+
+  fountain(stone, stoneD, stonePale, bronze) {
+    const F = getModel("fountain");
+    this.scene.add(F);
+    /* the water levels the model actually has, not the ones this code was
+       written against */
+    const low = F.getObjectByName("waterLow"), high = F.getObjectByName("waterHigh");
+    const yLow = low ? low.position.y : .88, yHigh = high ? high.position.y : 2.85;
 
     /* four spouts, and the sheets of water falling off them */
     const sheet = new StdMat({ color: 0xbfe6ff, transparent: true, opacity: .3,
@@ -3495,10 +3515,11 @@ class Game {
     for (let i = 0; i < 4; i++) {
       const a = i / 4 * Math.PI * 2 + Math.PI / 4;
       const sx = Math.cos(a), sz = Math.sin(a);
-      this.m(new CylGeo(.11, .14, .42, 8), bronze, sx * 1.38, 2.78, sz * 1.38,
+      const spoutY = yHigh - .07, hitY = yLow + .05;
+      this.m(new CylGeo(.11, .14, .42, 8), bronze, sx * 1.38, spoutY, sz * 1.38,
         { parent: F, rz: Math.PI / 2, ry: -a });
-      const fall = this.m(new BoxGeo(.28, 1.85, .05), sheet, sx * 1.5, 1.85, sz * 1.5,
-        { parent: F, ry: -a, cast: false });
+      const fall = this.m(new BoxGeo(.28, spoutY - hitY, .05), sheet,
+        sx * 1.5, (spoutY + hitY) / 2, sz * 1.5, { parent: F, ry: -a, cast: false });
       this.anims.push(t => {
         fall.scale.y = 1 + Math.sin(t * 3.1 + i) * .06;
         fall.material.opacity = .26 + Math.sin(t * 2.3 + i * 1.7) * .05;
@@ -3510,7 +3531,7 @@ class Game {
     for (let i = 0; i < 3; i++) {
       const ring = this.m(new RingGeo(.5, .74, 40), new BasicMat({
         color: 0xa8dcff, transparent: true, opacity: .3, depthWrite: false, blending: BLEND_ADD }),
-        0, .9, 0, { parent: F, rx: -Math.PI / 2, cast: false });
+        0, yLow + .02, 0, { parent: F, rx: -Math.PI / 2, cast: false });
       this.anims.push(t => {
         const ph = ((t * .42 + i / 3) % 1);
         const s = .8 + ph * 3.4;
@@ -3526,15 +3547,15 @@ class Game {
        holds a cat-statue file it arrives here instead, and nothing else in
        this function changes — that is the whole contract the folder offers. */
     const statue = getModel("cat-statue");
-    statue.position.y = 3.06;
+    statue.position.y = yHigh + .21;
     statue.scale.setScalar(1.34);
     F.add(statue);
 
     /* Lit from below like a monument, not from a lantern hung over its head.
        The old rig had a 4.4-unit green sprite parked at the statue's shoulder,
        which is exactly where it stops being a statue and becomes a blob. */
-    this.addLight(0, 2.2, 0, 0x7fdca8, 5, 20);
-    F.add(this.glowSprite(0x7fdca8, 1.7, new V3(0, 3.1, 0)));
+    this.addLight(0, yLow + 1.3, 0, 0x7fdca8, 5, 20);
+    F.add(this.glowSprite(0x7fdca8, 1.7, new V3(0, yHigh + .25, 0)));
 
     /* spray, arcing off the upper bowl into the basin */
     const drops = IS_TOUCH ? 22 : 44;
@@ -3550,7 +3571,7 @@ class Game {
         const ang = i * 2.399;
         const r = 1.35 + ph * 1.7;                      // outward as it falls
         a[i * 3] = Math.cos(ang) * r;
-        a[i * 3 + 1] = 3.15 + Math.sin(ph * 2.1) * .9 - ph * ph * 2.9;
+        a[i * 3 + 1] = yHigh + .3 + Math.sin(ph * 2.1) * .9 - ph * ph * 2.9;
         a[i * 3 + 2] = Math.sin(ang) * r;
       }
       pts.geometry.attributes.position.needsUpdate = true;
