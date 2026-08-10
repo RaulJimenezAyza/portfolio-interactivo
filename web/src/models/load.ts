@@ -116,9 +116,9 @@ export async function primeModels() {
 /** The call the scene makes. Returns the model from public/models if the file
  *  was there when primeModels() ran, and the procedural build if it was not.
  *  Same key, same contract, so the caller never learns which it got. */
-export function getModel(key: string): THREE.Object3D {
+export function getModel(key: string, variant = 0): THREE.Object3D {
   const spec = MODELS[key];
   if (!spec) throw new Error(`getModel: unknown model "${key}"`);
   const proto = ready.get(key);
-  return proto ? proto.clone(true) : spec.fallback();
+  return proto ? proto.clone(true) : spec.fallback(variant);
 }

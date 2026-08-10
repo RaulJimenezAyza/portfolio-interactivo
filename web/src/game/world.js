@@ -2495,6 +2495,8 @@ class Game {
     registerFallback("pine", () => this.pineModel());
     registerFallback("lamp", () => this.lampModel());
     registerFallback("crate", () => this.crateModel());
+    registerFallback("stele", () => this.steleModel());
+    registerFallback("coaster-car", i => this.coasterCarModel(i));
 
     this.buildTerrain();
     this.buildPlaza();
@@ -3658,8 +3660,13 @@ class Game {
      A marker per road. It carries the temple's colour in an inset panel and
      its name cut into the face, so the square explains its own exits instead
      of leaving you to walk down all eight and find out. */
-  stele(x, z, ry, color, name) {
-    const G = new Grp(); G.position.set(x, 0, z); G.rotation.y = ry; this.scene.add(G);
+  /* The stone only. The colour and the name are not part of the model: eight
+     of these stand around the square and each one belongs to a different
+     temple, so the identity is the scene's business and the rock is what the
+     folder can replace. The recessed face is named `panel` so a replacement
+     can put its inset somewhere else and still be found. */
+  steleModel() {
+    const G = new Grp();
     /* eight of these get built; one pair of materials between them, or the
        square alone accounts for sixteen identical standard materials */
     if (!this.steleMats) this.steleMats = {
@@ -3677,12 +3684,22 @@ class Game {
     /* two shoulders so the shaft is not a plain post */
     for (const s of [-1, 1])
       this.m(new BoxGeo(.2, .44, .2), rockD, s * .42, 2.05, 0, { parent: G, rz: s * .3 });
+    this.m(new BoxGeo(.68, 1.3, .09), rockD, 0, 1.5, .36, { parent: G, recv: true }).name = "panel";
+    return G;
+  }
+
+  stele(x, z, ry, color, name) {
+    const G = getModel("stele");
+    G.position.set(x, 0, z); G.rotation.y = ry; this.scene.add(G);
+    /* everything from here down is this particular temple's, not the stone's,
+       and rides on wherever the model put its panel */
+    const panel = G.getObjectByName("panel");
+    const py = panel ? panel.position.y : 1.5;
+    const pz = panel ? panel.position.z : .36;
 
     const c = new Col(color);
-    /* the inset: recessed panel, glowing bar, name cut under it */
-    this.m(new BoxGeo(.68, 1.3, .09), rockD, 0, 1.5, .36, { parent: G, recv: true });
     this.m(new BoxGeo(.44, .44, .07), new StdMat({ color: c, emissive: c,
-      emissiveIntensity: 1.15, roughness: .3 }), 0, 1.82, .42, { parent: G, cast: false });
+      emissiveIntensity: 1.15, roughness: .3 }), 0, py + .32, pz + .06, { parent: G, cast: false });
     const plate = this.makeCanvas(256, 128, g => {
       g.fillStyle = "#3a3546"; g.fillRect(0, 0, 256, 128);
       g.font = '700 30px "Space Grotesk", sans-serif';
@@ -3702,9 +3719,9 @@ class Game {
       use.forEach((ln, i) => g.fillText(ln, 128, 64 + (i - (use.length - 1) / 2) * 34));
     });
     this.m(new PlaneGeo(.6, .3), new BasicMat({ map: plate, transparent: true }),
-      0, 1.24, .43, { parent: G, cast: false });
+      0, py - .26, pz + .07, { parent: G, cast: false });
 
-    G.add(this.glowSprite(color, 1.3, new V3(0, 1.82, .48)));
+    G.add(this.glowSprite(color, 1.3, new V3(0, py + .32, pz + .12)));
     this.scyl(.55, 2.8, x, 1.4, z);
     this.addOccluder(x, 1.6, z, .72);
   }
@@ -3738,6 +3755,28 @@ class Game {
     this.m(new IcoGeo(.42, 1), this.foliageMat(0x3a7d4a), .18, 2.32, -.1, { parent: G });
     this.scyl(.88, 1, x, .5, z);
     this.addOccluder(x, 1.6, z, 1);
+  }
+
+  /* One car of the train, nose toward +Z, origin on the axle line. */
+  coasterCarModel(i = 0) {
+    if (!this.carMats) this.carMats = {
+      shell: this.mat(0xd6543c, { roughness: .55, flatShading: true }),
+      lead: this.mat(0xf0a35e, { roughness: .55, flatShading: true }),
+      trim: this.mat(0xffd76a, { roughness: .4, metalness: .3 }),
+      dark: this.mat(0x2e2b34, { roughness: .7 })
+    };
+    const { shell, lead, trim, dark } = this.carMats;
+    const car = new Grp();
+    this.m(new BoxGeo(1.05, .62, 1.5), i ? shell : lead, 0, .42, 0, { parent: car, recv: true });
+    this.m(new BoxGeo(1.12, .12, 1.56), trim, 0, .74, 0, { parent: car, cast: false });
+    if (!i) this.m(new ConeGeo(.34, .62, 6), shell, 0, .46, .92, { parent: car, rx: Math.PI / 2 });
+    this.m(new BoxGeo(.9, .28, .1), dark, 0, .78, -.4, { parent: car, cast: false });   // lap bar
+    for (const s of [-1, 1]) for (const z of [-.5, .5])
+      this.m(new CylGeo(.17, .17, .1, 8), dark, s * .52, .16, z, { parent: car, rz: Math.PI / 2, cast: false });
+    /* a passenger, so the thing has a reason to be moving */
+    this.m(new SphGeo(.2, 10, 8), this.mat([0xe08840, 0x8fb0ff, 0x7fdca8][i % 3], { roughness: .8 }),
+      0, .82, -.1, { parent: car, cast: false }).name = "rider";
+    return car;
   }
 
   crateModel() {
@@ -4486,18 +4525,15 @@ class Game {
     const dark = this.mat(0x2e2b34, { roughness: .7 });
     const cars = [];
     for (let i = 0; i < 3; i++) {
-      const car = new Grp(); G.add(car);
-      this.m(new BoxGeo(1.05, .62, 1.5), i ? shell : this.mat(0xf0a35e, { roughness: .55, flatShading: true }),
-        0, .42, 0, { parent: car, recv: true });
-      this.m(new BoxGeo(1.12, .12, 1.56), trim, 0, .74, 0, { parent: car, cast: false });
-      if (!i) this.m(new ConeGeo(.34, .62, 6), shell, 0, .46, .92, { parent: car, rx: Math.PI / 2 });
-      this.m(new BoxGeo(.9, .28, .1), dark, 0, .78, -.4, { parent: car, cast: false });  // lap bar
-      for (const s of [-1, 1]) for (const z of [-.5, .5])
-        this.m(new CylGeo(.17, .17, .1, 8), dark, s * .52, .16, z, { parent: car, rz: Math.PI / 2, cast: false });
-      /* a passenger, so the thing has a reason to be moving */
-      const rider = this.m(new SphGeo(.2, 10, 8), this.mat([0xe08840, 0x8fb0ff, 0x7fdca8][i], { roughness: .8 }),
-        0, .82, -.1, { parent: car, cast: false });
-      if (!i) this.frontRider = rider;      // hidden while you are the one sitting there
+      /* The lead car is not the same object as the two behind it — it has the
+         nose cone and a different shell — so the index goes to the builder.
+         A replacement .glb is one car and gets used for all three; that is
+         the trade for making it swappable, and a coaster train whose front
+         car matches the rest is not wrong, just plainer. */
+      const car = getModel("coaster-car", i);
+      G.add(car);
+      const rider = car.getObjectByName("rider");
+      if (!i && rider) this.frontRider = rider;   // hidden while you are in that seat
       cars.push(car);
     }
     this.coaster = { u: 0, v: 6, cars, riding: false, rideU: 0, group: G };

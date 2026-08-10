@@ -10,8 +10,12 @@ import * as THREE from "three";
 export interface ModelSpec {
   /** file name inside public/models — the only thing you change to swap a model */
   file: string;
-  /** built from primitives when the file is absent */
-  fallback: () => THREE.Object3D;
+  /** Built from primitives when the file is absent. The argument is a variant
+   *  index for the handful of models that come in more than one flavour —
+   *  the coaster's lead car carries a nose cone the others do not. A file in
+   *  the folder is one model and answers for every variant, which is the
+   *  trade for making it swappable at all. */
+  fallback: (variant?: number) => THREE.Object3D;
   /** metres, applied to whatever comes out of the file. Authored models rarely
    *  agree with the world's scale on the first try; this is the knob. */
   scale?: number;
