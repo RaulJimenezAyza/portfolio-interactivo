@@ -1,0 +1,225 @@
+/* Ported verbatim from the single-file build's <style> block. */
+  :root{
+    --bg:#0a0a0c; --panel:#0d0d10; --line:#1c1c21; --line2:#2c2c32;
+    --ink:#ecebe8; --dim:#b6b3ac; --mut:#8f8d87; --faint:#5c5a55;
+    --green:#7fdca8; --amber:#e8b06a; --sky:#12233a; --gold:#ffd76a;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0;height:100%;background:var(--bg);overflow:hidden;overscroll-behavior:none}
+  body{font-family:'Space Grotesk',system-ui,sans-serif;color:var(--ink);touch-action:none}
+  canvas{display:block}
+  a{color:var(--green);text-decoration:none}
+  ::selection{background:var(--green);color:#0a0a0c}
+  @keyframes blink{0%,49%{opacity:1}50%,100%{opacity:0}}
+  @keyframes floatUp{from{transform:translateY(14px);opacity:0}to{transform:translateY(0);opacity:1}}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  @keyframes pop{0%{transform:scale(.9);opacity:0}100%{transform:scale(1);opacity:1}}
+
+  #scene{position:fixed;inset:0;z-index:0}
+  #fade{position:fixed;inset:0;z-index:65;background:#05050a;opacity:0;pointer-events:none;transition:opacity .26s ease}
+  #fade.on{opacity:1}
+
+  /* top HUD */
+  #hud{position:fixed;top:0;left:0;right:0;z-index:20;display:flex;align-items:flex-start;justify-content:space-between;
+    gap:16px;padding:16px 20px;pointer-events:none}
+  .brand{pointer-events:auto;background:#0b0b0ecc;backdrop-filter:blur(6px);border:1px solid var(--line2);border-radius:4px;padding:10px 14px}
+  .brand .tag{font-family:'JetBrains Mono',monospace;font-size:12px;letter-spacing:.14em;color:var(--green)}
+  .brand .name{font-size:14px;font-weight:600;margin-top:2px}
+  .brand .role{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--mut);letter-spacing:.08em;margin-top:3px}
+  .hud-right{display:flex;gap:8px;pointer-events:auto}
+  .hbtn{padding:9px 14px;border:1px solid var(--line2);background:#0b0b0ecc;backdrop-filter:blur(6px);color:var(--ink);
+    font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:.1em;text-transform:uppercase;cursor:pointer;border-radius:4px;transition:.15s}
+  .hbtn:hover{border-color:var(--green);color:var(--green)}
+
+  /* controls legend */
+  #legend{position:fixed;left:50%;bottom:18px;transform:translateX(-50%);z-index:20;display:flex;gap:16px;align-items:center;
+    padding:10px 16px;border:1px solid var(--line2);background:#0b0b0ecc;backdrop-filter:blur(8px);border-radius:6px;
+    font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--mut);pointer-events:none;flex-wrap:wrap;justify-content:center;max-width:calc(100vw - 24px);
+    transition:opacity .45s ease,transform .45s ease}
+  /* the cheat sheet steps aside once you have read it; the ? button brings it back */
+  #legend.hide{opacity:0;transform:translateX(-50%) translateY(14px)}
+  .hbtn.on{border-color:var(--green);color:var(--green)}
+  #legend .grp{display:flex;align-items:center;gap:7px}
+  #legend .key{display:inline-grid;place-items:center;min-width:22px;height:22px;padding:0 5px;border:1px solid var(--line2);
+    border-radius:3px;background:#101014;color:var(--ink);font-size:10px}
+  #legend b{color:var(--dim);font-weight:400}
+
+  /* proximity prompt */
+  #prompt{position:fixed;left:50%;top:62%;transform:translateX(-50%);z-index:20;display:none;pointer-events:none;
+    padding:14px 22px;border:1px solid var(--green);background:#0b0f0cdd;backdrop-filter:blur(8px);border-radius:6px;text-align:center;
+    animation:pop .18s ease both;max-width:min(480px,90vw)}
+  #prompt.show{display:block}
+  #prompt .k{font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.18em;color:var(--green);text-transform:uppercase}
+  #prompt .t{margin-top:6px;font-size:19px;font-weight:700}
+  #prompt .l{margin-top:7px;font-size:13px;line-height:1.5;color:var(--dim);font-style:italic}
+  #prompt .o{margin-top:8px;font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--mut)}
+
+  /* counters cluster */
+  #counters{position:fixed;left:20px;bottom:18px;z-index:20;display:flex;flex-direction:column;gap:6px;pointer-events:none}
+  #counters .box{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--mut);
+    border:1px solid var(--line2);background:#0b0b0ecc;backdrop-filter:blur(6px);border-radius:6px;padding:7px 12px}
+  #counters b{color:var(--gold);font-size:14px}
+  #speed b{color:var(--green);font-size:15px}
+  #toast{position:fixed;left:50%;top:88px;transform:translateX(-50%);z-index:25;pointer-events:none;text-align:center;
+    font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--ink);background:#0b0b0edd;border:1px solid var(--line2);
+    padding:8px 14px;border-radius:6px;opacity:0;transition:opacity .3s;max-width:min(520px,92vw)}
+  #toast.show{opacity:1}
+
+  /* touch controls */
+  #touch{position:fixed;inset:0;z-index:22;display:none;pointer-events:none}
+  body.touch #touch{display:block}
+  body.touch #counters{bottom:150px}
+  .pad{position:absolute;bottom:26px;display:grid;gap:8px;pointer-events:auto}
+  #padL{left:22px;grid-template-columns:repeat(3,56px);grid-template-rows:repeat(2,56px)}
+  #padR{right:22px;grid-template-columns:repeat(2,60px)}
+  .tbtn{width:100%;height:56px;border:1px solid var(--line2);background:#0b0b0ecc;backdrop-filter:blur(6px);color:var(--ink);
+    border-radius:10px;font-size:20px;display:grid;place-items:center;user-select:none;touch-action:none}
+  .tbtn:active{border-color:var(--green);color:var(--green);background:#0e130fcc}
+  #padL .up{grid-column:2;grid-row:1}#padL .lft{grid-column:1;grid-row:2}#padL .dn{grid-column:2;grid-row:2}#padL .rgt{grid-column:3;grid-row:2}
+  #padR .tbtn{height:60px;font-family:'JetBrains Mono',monospace;font-size:12px}
+
+  /* intro / start */
+  #intro{position:fixed;inset:0;z-index:60;background:radial-gradient(ellipse at 50% 40%,#12233a 0%,#0a0a0c 70%);
+    display:flex;flex-direction:column;align-items:center;justify-content:center;gap:20px;text-align:center;padding:28px;transition:opacity .6s ease}
+  #intro.hide{opacity:0;pointer-events:none}
+  #intro .kick{font-family:'JetBrains Mono',monospace;font-size:12px;letter-spacing:.24em;color:var(--green);text-transform:uppercase}
+  #intro h1{margin:6px 0 0;font-size:clamp(36px,7vw,78px);line-height:.98;font-weight:700;letter-spacing:-.03em}
+  #intro p{margin:4px 0 0;max-width:600px;font-size:16px;line-height:1.6;color:var(--dim)}
+  #intro .ring{width:44px;height:44px;border:2px solid #26313f;border-top-color:var(--green);border-radius:50%;animation:spin 1s linear infinite}
+  #startBtn{margin-top:6px;padding:15px 30px;border:1px solid var(--green);background:transparent;color:var(--green);
+    font-family:'JetBrains Mono',monospace;font-size:14px;letter-spacing:.14em;text-transform:uppercase;cursor:pointer;border-radius:5px;transition:.15s;display:none}
+  #startBtn.show{display:inline-block}
+  #startBtn:hover{background:var(--green);color:#0a0a0c}
+  #intro .mini{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--mut);letter-spacing:.06em;display:flex;gap:14px;flex-wrap:wrap;justify-content:center;margin-top:8px}
+  #intro .mini span{border:1px solid var(--line2);border-radius:4px;padding:6px 10px}
+  #introErr{color:var(--amber);font-size:13px;max-width:420px;display:none}
+
+  /* modal (projects) */
+  .ov{position:fixed;inset:0;z-index:70;background:#05050799;backdrop-filter:blur(10px);display:none;align-items:center;justify-content:center;padding:24px}
+  .ov.show{display:flex}
+  #modal .box{position:relative;width:min(720px,100%);max-height:86vh;overflow:auto;border:1px solid var(--line2);background:var(--panel);animation:floatUp .25s ease both;border-radius:6px}
+  /* The crest used to be a flat block of the project colour with near-black
+     text on it, which made the pink and cyan projects unreadable. It is now a
+     dark panel with the colour used only as a glow behind big initials. */
+  #modal .shot{position:relative;height:150px;display:grid;place-items:center;overflow:hidden;
+    background:#0b0b0e;border-bottom:1px solid #1f1f25}
+  #modal .shot::before{content:"";position:absolute;inset:0;
+    background:radial-gradient(ellipse 46% 62% at 50% 132%,var(--accent) 0%,transparent 72%);opacity:.5}
+  /* a faint grid plus a dark veil: the accent should read as a glow rising
+     from the bottom edge, never as a flat swatch that swallows the initials */
+  #modal .shot::after{content:"";position:absolute;inset:0;
+    background:repeating-linear-gradient(90deg,#ffffff0a 0 1px,transparent 1px 34px),
+               repeating-linear-gradient(0deg,#ffffff0a 0 1px,transparent 1px 34px),
+               linear-gradient(180deg,rgba(11,11,14,.82) 0%,rgba(11,11,14,.35) 55%,rgba(11,11,14,.7) 100%)}
+  #modal .shot span{position:relative;z-index:1;font-family:'JetBrains Mono',monospace;font-weight:700;
+    font-size:52px;letter-spacing:.14em;color:var(--ink);
+    text-shadow:0 0 28px var(--accent),0 2px 12px rgba(0,0,0,.8)}
+  /* NOT .pad — the touch d-pad owns that class globally and would force
+     position:absolute onto this block, collapsing the whole modal. */
+  #modal .mbody{padding:30px 32px 34px}
+  #modal .mbody .k{font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.16em;text-transform:uppercase}
+  #modal h3{margin:12px 0 0;font-size:30px;font-weight:700;letter-spacing:-.02em}
+  #modal .b{margin:16px 0 0;font-size:16px;line-height:1.7;color:var(--dim)}
+  #modal .tags{display:flex;flex-wrap:wrap;gap:8px;margin-top:22px}
+  #modal .tag{padding:6px 11px;border:1px solid #26262b;font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--mut)}
+  #modal .acts{display:flex;gap:12px;margin-top:26px;flex-wrap:wrap}
+  .btn{padding:12px 20px;border:1px solid var(--line2);color:var(--dim);font-family:'JetBrains Mono',monospace;font-size:12px;
+    letter-spacing:.1em;text-transform:uppercase;cursor:pointer;background:transparent;border-radius:4px;transition:.15s}
+  .btn.primary{border-color:var(--green);color:var(--green)}
+  .btn.primary:hover{background:var(--green);color:#0a0a0c}
+  .btn.ghost:hover{border-color:var(--faint);color:var(--ink)}
+
+  /* info / CV overlay */
+  #info .box{position:relative;width:min(920px,100%);max-height:90vh;overflow:auto;border:1px solid var(--line2);background:var(--panel);border-radius:8px;animation:floatUp .3s ease both}
+  #info .inner{padding:clamp(24px,4vw,52px)}
+  #info h2{font-size:clamp(24px,3.4vw,40px);font-weight:700;letter-spacing:-.02em;margin:0 0 6px}
+  #info .num{font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:.2em;color:var(--faint);text-transform:uppercase}
+  #info section{padding:34px 0;border-top:1px solid var(--line)}
+  #info section:first-of-type{border-top:0;padding-top:8px}
+  #info p{font-size:16px;line-height:1.7;color:var(--dim);text-wrap:pretty}
+  #info .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:1px;margin-top:26px;background:var(--line);border:1px solid var(--line)}
+  #info .stat{padding:18px;background:var(--panel)}
+  #info .stat .v{font-family:'JetBrains Mono',monospace;font-size:28px}
+  #info .stat .c{margin-top:6px;font-size:12px;color:var(--mut);line-height:1.4}
+  #info .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:14px;margin-top:22px}
+  #info .card{border:1px solid #1f1f25;background:#0c0c0f;border-radius:6px;padding:20px;cursor:pointer;transition:.18s}
+  #info .card:hover{border-color:#3a3a42;transform:translateY(-2px)}
+  #info .card .meta{display:flex;align-items:center;gap:9px}
+  #info .card .sw{width:7px;height:7px}
+  #info .card .kd{font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.14em;color:var(--mut);text-transform:uppercase}
+  #info .card .t{margin-top:10px;font-size:18px;font-weight:700}
+  #info .card .bl{margin-top:8px;font-size:13px;line-height:1.5;color:var(--mut)}
+  #info .skills{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:1px;margin-top:22px;background:var(--line);border:1px solid var(--line)}
+  #info .skillcol{padding:22px;background:var(--panel)}
+  #info .skillcol .lbl{font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:.14em;text-transform:uppercase}
+  #info .chips{margin-top:14px;display:flex;flex-wrap:wrap;gap:7px}
+  #info .chip{padding:6px 11px;border:1px solid #26262b;font-size:13px;color:var(--dim);border-radius:3px}
+  #info .tl{display:grid;grid-template-columns:120px 1fr;gap:24px;padding:20px 0;border-top:1px solid var(--line)}
+  #info .tl:first-child{border-top:0}
+  #info .tl .when{font-family:'JetBrains Mono',monospace;font-size:12px}
+  #info .tl .role{font-size:18px;font-weight:700}
+  #info .tl .place{margin-top:3px;font-size:13px;color:var(--mut)}
+  #info .tl .det{margin-top:8px;font-size:14px;line-height:1.6;color:var(--dim)}
+  #info .links{display:flex;flex-direction:column;gap:2px;font-family:'JetBrains Mono',monospace;font-size:13px;margin-top:18px}
+  #info .links a,#info .links div{display:flex;justify-content:space-between;gap:16px;padding:13px 0;border-bottom:1px solid var(--line)}
+  #info .links a{color:var(--ink)}#info .links a:hover{color:var(--green)}
+  #info .links .lab{color:var(--faint)}
+  #info .close{position:sticky;top:0;float:right;margin:14px 14px 0 0}
+  /* ---- Mastermind minigame ---- */
+  #mm .box{position:relative;width:min(560px,100%);max-height:92vh;overflow:auto;border:1px solid var(--line2);
+    background:var(--panel);border-radius:8px;animation:floatUp .25s ease both}
+  #mm .inner{padding:clamp(20px,3.5vw,32px)}
+  #mm .num{font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:.2em;color:#f2a2c4;text-transform:uppercase}
+  #mm h2{margin:8px 0 0;font-size:clamp(22px,3vw,32px);font-weight:700;letter-spacing:-.02em}
+  #mm .hint{margin:10px 0 0;font-size:14px;line-height:1.6;color:var(--dim)}
+  #mm .rows{margin-top:20px;display:flex;flex-direction:column;gap:6px}
+  #mm .row{display:flex;align-items:center;gap:12px;padding:6px 10px;border:1px solid #1a1a1f;border-radius:6px;background:#0a0a0d}
+  #mm .row.live{border-color:#3d3d46;background:#101015}
+  #mm .row .n{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--faint);width:18px}
+  #mm .slots{display:flex;gap:7px}
+  #mm .pegs{display:grid;grid-template-columns:repeat(2,10px);gap:3px;margin-left:auto}
+  #mm .peg{width:10px;height:10px;border-radius:50%;border:1px solid #33333c}
+  #mm .peg.hit{background:var(--green);border-color:var(--green)}
+  #mm .peg.near{background:transparent;border-color:var(--ink);box-shadow:inset 0 0 0 2px #55555f}
+  /* Each colour also carries a glyph so the board stays readable for
+     colour-blind players and at small sizes. */
+  #mm .slot{width:34px;height:34px;border-radius:8px;border:1px solid #2c2c34;background:#141419;
+    display:grid;place-items:center;font-size:16px;font-weight:700;color:#0a0a0c;line-height:1;user-select:none}
+  #mm .slot.empty{color:#3a3a44;font-size:12px}
+  #mm .palette{margin-top:22px;display:flex;flex-wrap:wrap;gap:9px}
+  #mm .pick{width:46px;height:46px;border-radius:10px;border:2px solid transparent;cursor:pointer;
+    display:grid;place-items:center;font-size:19px;font-weight:700;color:#0a0a0c;position:relative;transition:.12s}
+  #mm .pick:hover{transform:translateY(-2px)}
+  #mm .pick i{position:absolute;bottom:2px;right:5px;font-style:normal;font-size:9px;opacity:.55;
+    font-family:'JetBrains Mono',monospace}
+  #mm .acts{display:flex;gap:10px;margin-top:22px;flex-wrap:wrap;align-items:center}
+  #mm .status{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--dim);margin-left:auto}
+  #mm .btn[disabled]{opacity:.35;cursor:not-allowed}
+  #mm .done{margin-top:18px;padding:16px;border-radius:6px;border:1px solid var(--line2);background:#0a0a0d;display:none}
+  #mm .done.show{display:block}
+  #mm .done b{display:block;font-size:18px;margin-bottom:6px}
+  #mm .done p{margin:0;font-size:14px;line-height:1.6;color:var(--dim)}
+
+  /* ---- cave arcade cabinet ---- */
+  #arc .box{position:relative;width:min(660px,100%);max-height:94vh;overflow:auto;border:1px solid var(--line2);
+    background:var(--panel);border-radius:8px;animation:floatUp .25s ease both}
+  #arc .inner{padding:clamp(18px,3vw,28px)}
+  #arc .num{font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:.2em;text-transform:uppercase}
+  #arc h2{margin:8px 0 0;font-size:clamp(20px,2.8vw,28px);font-weight:700;letter-spacing:-.02em}
+  #arc .hint{margin:8px 0 0;font-size:13px;line-height:1.6;color:var(--mut)}
+  #arc .screen{margin-top:16px;position:relative;border:1px solid #26262e;border-radius:6px;overflow:hidden;background:#07070b}
+  #arc canvas{display:block;width:100%;height:auto;image-rendering:pixelated}
+  #arc .scores{display:flex;gap:18px;align-items:center;margin-top:14px;
+    font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--mut)}
+  #arc .scores b{color:var(--ink);font-size:17px}
+  #arc .scores .best b{color:var(--gold)}
+  #arc .acts{display:flex;gap:10px;margin-top:16px;flex-wrap:wrap}
+  /* the overlay that covers the canvas before a run and after a game over */
+  #arc .curtain{position:absolute;inset:0;display:grid;place-items:center;text-align:center;
+    background:#07070bd9;backdrop-filter:blur(2px);padding:20px}
+  #arc .curtain.gone{display:none}
+  #arc .curtain b{display:block;font-size:20px;margin-bottom:6px}
+  #arc .curtain span{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--dim);line-height:1.7}
+
+  @media(max-width:640px){ #info .tl{grid-template-columns:1fr;gap:6px} #legend{font-size:10px;gap:10px} .brand .role{display:none}
+    #mm .slot{width:28px;height:28px} #mm .pick{width:40px;height:40px} }
