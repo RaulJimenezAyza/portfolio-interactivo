@@ -4402,6 +4402,57 @@ class Game {
       const a = i / 22 * Math.PI * 2 + .9, r = 10 + (i % 5) * 6.5;
       this.parkProp("park-flowers", mid.x + Math.cos(a) * r, mid.z + Math.sin(a) * r, a);
     }
+    /* ---- planting ----
+       The island is a lot of empty grass between rides now that they are
+       spread out. This fills it, and refuses every spot that is too near
+       something that matters: the plan's own footprints, the coaster's
+       circuit, the paths, the wall and the gate. Nothing here is placed by
+       eye, so nothing here can quietly land on top of something else. */
+    {
+      const keep = [
+        ...[plan.midway, plan.wheel, plan.carousel].map(o => ({ p: at(o.fwd, o.side), r: o.r + 4 })),
+        ...plan.kiosks.map(k => ({ p: at(k.fwd, k.side), r: 6 }))
+      ];
+      const clear = (x, z) => {
+        for (const k of keep) if (Math.hypot(x - k.p.x, z - k.p.z) < k.r) return false;
+        /* Off the track, with room for the supports under it. Sampled from
+           the curve rather than from this.coasterFrames, which does not exist
+           yet — buildPark runs before buildCoaster. Only x and z are needed
+           here and those do not change when initCoasterTrack lifts the
+           heights. */
+        for (let i = 0; i < 80; i++) {
+          const f = coasterAt(i / 80);
+          if (Math.hypot(x - f.x, z - f.z) < 5) return false;
+        }
+        const a = Math.atan2(z - PARK.z, x - PARK.x);
+        const d = Math.hypot(x - PARK.x, z - PARK.z);
+        return d > 8 && d < parkEdge(a) - 7;      // inside the wall, off the middle
+      };
+      let placed = 0, guard = 0;
+      while (placed < (IS_TOUCH ? 18 : 46) && guard++ < 600) {
+        const a = hash2(guard, 5) * 6.283;
+        const r = 8 + hash2(guard, 11) * 40;
+        const x = PARK.x + Math.cos(a) * r, z = PARK.z + Math.sin(a) * r;
+        if (!clear(x, z)) continue;
+        const roll = hash2(guard, 17);
+        if (roll < .42) {
+          /* the same conifer the main island uses, so the two read as one
+             place rather than two asset packs */
+          const t = getModel("pine");
+          t.position.set(x, heightAt(x, z), z);
+          t.rotation.y = hash2(guard, 23) * 6.283;
+          t.scale.setScalar(.55 + hash2(guard, 29) * .35);
+          this.scene.add(t); this.outdoorOnly.push(t);
+          this.scyl(.5, 3, x, heightAt(x, z) + 1.5, z);
+        } else if (roll < .78) {
+          this.parkProp("park-flowers", x, z, a);
+        } else {
+          this.grassTuftAt(x, z);
+        }
+        placed++;
+      }
+    }
+
     /* lamps down the midway */
     for (let i = 0; i < 6; i++) {
       const a = i / 6 * Math.PI * 2;
@@ -4695,6 +4746,22 @@ class Game {
     this.addOccluder(x, gy + size.y / 2, z, Math.max(size.x, size.z) * .6);
     /* a lamp over the counter, so the midway is lit by the stalls on it */
     this.addLight(x, gy + size.y + .4, z, 0xffd9a0, 4, 12);
+  }
+
+  /* One clump of grass, for the park — the main island's are merged into a
+     single buffer at build time and that pass has already run by now. */
+  grassTuftAt(x, z) {
+    this.grassCardMat();
+    const y = heightAt(x, z);
+    const G = new Grp(); G.position.set(x, y, z); G.rotation.y = Math.random() * 6.283;
+    for (let k = 0; k < 3; k++) {
+      const card = this.m(new PlaneGeo(1.1, .85), this.grassCards, 0, .42, 0,
+        { parent: G, ry: k * Math.PI / 3, cast: false });
+      /* no normal fiddling needed: grassCards goes through groundLit, which
+         pins the shading normal to world up in the fragment shader */
+    }
+    this.scene.add(G); this.outdoorOnly.push(G);
+    return G;
   }
 
   /* ---- midway furniture ----
