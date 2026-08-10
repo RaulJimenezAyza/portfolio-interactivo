@@ -92,9 +92,18 @@ export const MODELS: Record<string, ModelSpec> = {
     fallback: () => new THREE.Group()
   },
   pine: {
-    file: "pine.glb", scale: 1, collider: "cylinder",
-    note: "Conifer. Origin at the roots, about 6m tall before scaling."
-  ,fallback: () => new THREE.Group() },
+    file: "pine.glb",
+    /* Kenney's Nature Kit conifer (CC0) is authored at 1.43 m; the procedural
+       one it replaces stands 7.7 m from roots to tip, and the scene scales
+       each tree by 0.7–1.5 on top of whatever arrives here. */
+    scale: 5.4,
+    /* and it sits 5 cm below its own origin, which at this scale is 27 cm of
+       trunk buried in the hill */
+    offset: [0, 0.27, 0],
+    collider: "cylinder",
+    note: "Conifer. Origin at the roots, about 7.7m tall once scaled.",
+    fallback: () => new THREE.Group()
+  },
   crate: {
     file: "crate.glb", scale: 1, collider: "box",
     note: "Pushable crate. Origin at its centre, 1.3m cube.",
