@@ -74,7 +74,7 @@ export const MODELS: Record<string, ModelSpec> = {
     file: "ferris-wheel.glb",
     scale: 1,
     collider: "cylinder",
-    note: "Park wheel. Origin at ground centre, wheel plane facing +X, 28m across. Any child named 'spin' is rotated; children named 'cab*' are kept level.",
+    note: "Park wheel. Origin at ground centre, wheel plane facing +X, 24m across, gondolas clear of the ground. Any child named 'spin' is rotated; children named 'cab*' are kept level.",
     fallback: () => new THREE.Group()
   },
   carousel: {

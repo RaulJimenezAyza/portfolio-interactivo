@@ -4315,8 +4315,8 @@ class Game {
          with the rides either side of it, so the whole fair read as one
          crowded strip and three quarters of the island was empty grass. The
          lobe is on the far side now, so there is room out there to use. */
-      midway:   { fwd: 14, side: 0, r: 11 },
-      wheel:    { fwd: 40, side: 16, r: 15 },
+      midway:   { fwd: 11, side: 0, r: 10 },
+      wheel:    { fwd: 34, side: 14, r: 13 },
       carousel: { fwd: 34, side: -20, r: 8 },
       kiosks: [
         { key: "stall-food", fwd: 12, side: -13 },
@@ -4335,11 +4335,15 @@ class Game {
     this.auditPark(plan, at);
     /* a worn midway between the gate and the rides */
     const mid = at(plan.midway.fwd, plan.midway.side);
-    this.m(new CircleGeo(13, 40), this.detail(this.mat(0x6f6555, { roughness: .95 }), 2.6, .17),
+    /* two metres past the plan's radius, which is the convention the audit
+       checks against: the paving may run under a kiosk's skirt, it may not run
+       under a ride */
+    this.m(new CircleGeo(plan.midway.r + 2, 40), this.detail(this.mat(0x6f6555, { roughness: .95 }), 2.6, .17),
       mid.x, PARK_Y + .06, mid.z, { rx: -Math.PI / 2, cast: false, recv: true });
 
-    /* Pulled in from twenty-five: the rim is fourteen metres, so out there
-       half the wheel hung over the water. */
+    /* Pulled in twice now, and the second time the wheel had to shrink as
+       well: at fwd 40 its rim reached 58m from the centre and the shore at
+       that bearing is 55.6, so a quarter of it stood over open water. */
     const wheel = at(plan.wheel.fwd, plan.wheel.side);
     /* The rim lies in the group's ZY plane, so the wheel's face normal is its
        local +X. Aim that at the middle of the park or you get a fourteen-metre
@@ -4387,47 +4391,58 @@ class Game {
       }
     }
 
+    /* ---- where a loose prop may stand ----
+       One test, used by both the dressing and the planting below. It was
+       written for the planting alone, and the benches and flower beds that
+       ran before it were placed straight off a radius from the midway — which
+       was harmless while the wheel sat forty metres away and stopped being
+       harmless the moment it moved to within twenty-seven. A prop is refused
+       near the plan's own footprints, near the coaster, and outside the wall.
+       `pad` lets the dressing hug the midway more closely than a tree may. */
+    const keep = [
+      ...[plan.midway, plan.wheel, plan.carousel].map(o => ({ p: at(o.fwd, o.side), r: o.r })),
+      ...plan.kiosks.map(k => ({ p: at(k.fwd, k.side), r: 2.5 }))
+    ];
+    const clear = (x, z, pad = 4) => {
+      for (const k of keep) if (Math.hypot(x - k.p.x, z - k.p.z) < k.r + pad) return false;
+      /* Off the track, with room for the supports under it. Sampled from
+         the curve rather than from this.coasterFrames, which does not exist
+         yet — buildPark runs before buildCoaster. Only x and z are needed
+         here and those do not change when initCoasterTrack lifts the
+         heights. */
+      for (let i = 0; i < 80; i++) {
+        const f = coasterAt(i / 80);
+        if (Math.hypot(x - f.x, z - f.z) < 5) return false;
+      }
+      const a = Math.atan2(z - PARK.z, x - PARK.x);
+      const d = Math.hypot(x - PARK.x, z - PARK.z);
+      return d < parkEdge(a) - 7;                 // inside the wall
+    };
+
     /* and the small stuff that makes a midway feel walked on rather than
        laid out: benches facing the rides, bins beside them, flower beds in
-       the gaps */
-    for (let i = 0; i < 10; i++) {
-      const a = i / 10 * Math.PI * 2 + .4;
-      const rad = 9.5 + (i % 3) * 8;
+       the gaps. Both rings spiral outward, and both skip a slot rather than
+       shove it: a bench that cannot stand clear is a bench nobody misses. */
+    for (let i = 0; i < 14; i++) {
+      const a = i / 14 * Math.PI * 2 + .4;
+      const rad = plan.midway.r + 1 + (i % 3) * 7;
       const b = { x: mid.x + Math.cos(a) * rad, z: mid.z + Math.sin(a) * rad };
+      if (!clear(b.x, b.z, 1.5)) continue;
       const face = Math.atan2(mid.x - b.x, mid.z - b.z);
       this.parkProp("park-bench", b.x, b.z, face);
       if (i % 2 === 0) this.parkProp("park-bin", b.x + Math.cos(a + .3) * 1.6, b.z + Math.sin(a + .3) * 1.6, 0);
     }
-    for (let i = 0; i < 22; i++) {
-      const a = i / 22 * Math.PI * 2 + .9, r = 10 + (i % 5) * 6.5;
-      this.parkProp("park-flowers", mid.x + Math.cos(a) * r, mid.z + Math.sin(a) * r, a);
+    for (let i = 0; i < 28; i++) {
+      const a = i / 28 * Math.PI * 2 + .9, r = plan.midway.r + 1.5 + (i % 5) * 6.5;
+      const p = { x: mid.x + Math.cos(a) * r, z: mid.z + Math.sin(a) * r };
+      if (clear(p.x, p.z, 1.2)) this.parkProp("park-flowers", p.x, p.z, a);
     }
     /* ---- planting ----
        The island is a lot of empty grass between rides now that they are
-       spread out. This fills it, and refuses every spot that is too near
-       something that matters: the plan's own footprints, the coaster's
-       circuit, the paths, the wall and the gate. Nothing here is placed by
-       eye, so nothing here can quietly land on top of something else. */
+       spread out. This fills it, refusing the same ground the dressing does
+       with a wider berth. Nothing here is placed by eye, so nothing here can
+       quietly land on top of something else. */
     {
-      const keep = [
-        ...[plan.midway, plan.wheel, plan.carousel].map(o => ({ p: at(o.fwd, o.side), r: o.r + 4 })),
-        ...plan.kiosks.map(k => ({ p: at(k.fwd, k.side), r: 6 }))
-      ];
-      const clear = (x, z) => {
-        for (const k of keep) if (Math.hypot(x - k.p.x, z - k.p.z) < k.r) return false;
-        /* Off the track, with room for the supports under it. Sampled from
-           the curve rather than from this.coasterFrames, which does not exist
-           yet — buildPark runs before buildCoaster. Only x and z are needed
-           here and those do not change when initCoasterTrack lifts the
-           heights. */
-        for (let i = 0; i < 80; i++) {
-          const f = coasterAt(i / 80);
-          if (Math.hypot(x - f.x, z - f.z) < 5) return false;
-        }
-        const a = Math.atan2(z - PARK.z, x - PARK.x);
-        const d = Math.hypot(x - PARK.x, z - PARK.z);
-        return d > 8 && d < parkEdge(a) - 7;      // inside the wall, off the middle
-      };
       let placed = 0, guard = 0;
       while (placed < (IS_TOUCH ? 18 : 46) && guard++ < 600) {
         const a = hash2(guard, 5) * 6.283;
@@ -4456,15 +4471,18 @@ class Game {
     /* lamps down the midway */
     for (let i = 0; i < 6; i++) {
       const a = i / 6 * Math.PI * 2;
-      const p = { x: mid.x + Math.cos(a) * 12.5, z: mid.z + Math.sin(a) * 12.5 };
-      const g = new Grp(); g.position.set(p.x, PARK_Y, p.z); this.scene.add(g);
+      const p = { x: mid.x + Math.cos(a) * (plan.midway.r + 1.5), z: mid.z + Math.sin(a) * (plan.midway.r + 1.5) };
+      /* on the ground, like everything else out here — at this radius the
+         far lobe has already started to fall away */
+      const gy = heightAt(p.x, p.z);
+      const g = new Grp(); g.position.set(p.x, gy, p.z); this.scene.add(g);
       this.outdoorOnly.push(g);
       this.m(new CylGeo(.09, .13, 3.2, 7), this.mat(0x232028, { roughness: .6, metalness: .5 }),
         0, 1.6, 0, { parent: g });
       this.m(new SphGeo(.24, 10, 8), new StdMat({ color: 0xffd9a0, emissive: new Col(0xffb96a),
         emissiveIntensity: .9, roughness: .3 }), 0, 3.3, 0, { parent: g, cast: false });
       g.add(this.glowSprite(0xffb96a, 1.8, new V3(0, 3.3, 0)));
-      if (i % 2 === 0) this.addLight(p.x, PARK_Y + 3.3, p.z, 0xffb371, 6, 18);
+      if (i % 2 === 0) this.addLight(p.x, gy + 3.3, p.z, 0xffb371, 6, 18);
     }
   }
 
@@ -4478,21 +4496,55 @@ class Game {
      replacement model has to offer the same handles for the scene to turn it
      and to keep its seats level. The folder's README lists them. */
   ferrisWheelModel() {
-    const R = 14, W = 2.6, N = 12;
+    /* Twelve metres, down from fourteen. A rim that size wants a d+r of
+       fifty-odd metres and the shore at the wheel's bearing is at fifty-five,
+       so the old one could not be moved anywhere on this island that both
+       cleared the midway and stayed inside the wall. */
+    const R = 12, W = 2.6, N = 12;
+    /* The gondolas hang 2.2m below the rim, so a hub at R + 1.2 put the
+       lowest one a metre into the ground — which is what the built audit kept
+       reporting as a box under the park. The hub clears the drop plus a bit,
+       and the legs are derived from it rather than tuned to it by hand. */
+    const DROP = 2.2, HUB = R + DROP + .8;
     const G = new Grp();
     const steel = this.mat(0xb8bcc8, { roughness: .5, metalness: .35, flatShading: true });
     const paint = this.mat(0xd6543c, { roughness: .7, flatShading: true });
 
-    /* A-frames either side, carrying the axle */
+    /* A-frames either side, carrying the axle. Each leg is tilted by TILT
+       about its own centre, so its top rises (L/2)cos(TILT) above a centre
+       that sits at L/2 - .6: solve that for the length whose top lands on the
+       hub and the frame follows the wheel instead of needing a new number. */
+    const TILT = .38;
+    const L = 2 * (HUB + .6) / (1 + Math.cos(TILT));
     for (const s of [-1, 1]) for (const d of [-1, 1])
-      this.m(new CylGeo(.28, .38, R + 2.4, 6), steel, s * W, (R + 2.4) / 2 - .6, d * 5.5,
-        { parent: G, rx: -d * .38, recv: true });
-    const hub = new Grp(); hub.position.y = R + 1.2; G.add(hub);
-    this.m(new CylGeo(.55, .55, W * 2 + .8, 10), steel, 0, R + 1.2, 0, { parent: G, rz: Math.PI / 2 });
+      this.m(new CylGeo(.28, .38, L, 6), steel, s * W, L / 2 - .6, d * 5.5,
+        { parent: G, rx: -d * TILT, recv: true });
+    const hub = new Grp(); hub.position.y = HUB; G.add(hub);
+    this.m(new CylGeo(.55, .55, W * 2 + .8, 10), steel, 0, HUB, 0, { parent: G, rz: Math.PI / 2 });
 
     const spin = new Grp(); hub.add(spin);
     for (const s of [-1, 1])
       this.m(new TorusGeo(R, .16, 6, 40), paint, s * W, 0, 0, { parent: spin, ry: Math.PI / 2 });
+
+    /* Running lights round both rims. A fairground wheel at night is a ring
+       of bulbs first and a structure second, and this island is lit at dusk
+       for most of the time you are on it — unlit, twelve metres of grey
+       tube disappeared into the sky the moment the sun went. Thirty-two beads
+       a rim, unlit geometry rather than lights: they are read by the bloom
+       pass, and thirty-two point lights would cost more than the whole park.
+       Their material is returned so the ride can chase them. */
+    const BULBS = 32;
+    const bulbs = new Grp(); bulbs.name = "bulbs"; spin.add(bulbs);
+    for (let i = 0; i < BULBS; i++) {
+      /* one material per bulb, so they can be chased in sequence rather than
+         all pulsing together — a wheel where every bulb blinks at once reads
+         as a fault, not a fairground */
+      const mat = new StdMat({ color: 0xfff2cf, emissive: new Col(0xffc978), emissiveIntensity: 1.6, roughness: .35 });
+      const a = i / BULBS * Math.PI * 2;
+      for (const s of [-1, 1])
+        this.m(new SphGeo(.17, 6, 5), mat, s * (W + .22), Math.sin(a) * R, Math.cos(a) * R,
+          { parent: bulbs, cast: false });
+    }
     const cabs = [];
     for (let i = 0; i < N; i++) {
       const a = i / N * Math.PI * 2;
@@ -4525,16 +4577,30 @@ class Game {
     G.position.set(x, gy, z); G.rotation.y = ry;
     this.scene.add(G); this.outdoorOnly.push(G);
     this.scyl(3, 6, x, gy + 3, z);
-    this.addOccluder(x, gy + 14, z, 7);
+    this.addOccluder(x, gy + 12, z, 7);
+    /* Two real lights at the hub, warm and wide. The bulbs on the rim are
+       emissive geometry and light nothing; without these the wheel glowed at
+       dusk and the ground under it stayed black, which reads as a decal
+       rather than a ride. Kept to two because point lights are the one thing
+       on this island there is a hard budget for. */
+    this.addLight(x, gy + 9, z, 0xffc27a, 7, 30);
+    this.addLight(x, gy + 2.4, z, 0xffb371, 4, 16);
     /* Found by name rather than closed over, so this works the same whether
        the wheel came from the folder or from the builder above. A model with
        no `spin` simply stands still instead of throwing. */
     const spin = G.getObjectByName("spin");
     if (!spin) return;
     const cabs = spin.children.filter(c => c.name.startsWith("cab"));
+    /* The chase. Bulbs are stored rim-pair by rim-pair, so every second child
+       is the same bulb on the far rim and dividing by two gives its position
+       round the wheel. A model with no `bulbs` group simply does not chase. */
+    const beads = (G.getObjectByName("bulbs")?.children ?? [])
+      .map((o, i) => ({ mat: o.material, phase: Math.floor(i / 2) * .45 }));
     this.anims.push(t => {
       spin.rotation.x = t * .18;
       for (const c of cabs) c.rotation.x = -spin.rotation.x;    // stay level
+      for (const b of beads)
+        b.mat.emissiveIntensity = 1.1 + Math.max(0, Math.sin(t * 2.6 - b.phase)) * 1.9;
     });
   }
 
@@ -4668,7 +4734,7 @@ class Game {
          midway paving as thirteen metres underground. */
       const lowest = new Box3().setFromObject(o).min.y;
       if (lowest < ground - 0.6)
-        below.push(`${o.geometry.type} at ${d.toFixed(0)}m, ${(ground - lowest).toFixed(1)}m under`);
+        below.push(`${o.geometry.type} at ${d.toFixed(0)}m (${p.x.toFixed(1)}, ${p.z.toFixed(1)}), ${(ground - lowest).toFixed(1)}m under`);
     });
     if (below.length) console.warn(`[park] ${below.length} below ground: ${below.slice(0, 8).join(" | ")}`);
     else console.info("[park] nothing inside the wall is below ground");
