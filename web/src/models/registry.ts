@@ -126,11 +126,6 @@ export const MODELS: Record<string, ModelSpec> = {
     note: "Lead car of the train, nose toward +Z. Origin on the axle line, 1.5m long before scale.",
     fallback: () => new THREE.Group()
   },
-  "park-fence": {
-    file: "park-fence.glb", scale: 1, collider: "none",
-    note: "One metre of railing, stretched on X to close the gap to its neighbour. Origin on the ground, rail running along X.",
-    fallback: () => new THREE.Group()
-  },
   "park-gate": {
     file: "park-gate.glb", scale: 2.3, collider: "none",
     note: "Arch at the end of the boardwalk. Origin on the deck, facing +Z, 2.43m tall before scale.",

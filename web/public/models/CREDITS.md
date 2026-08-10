@@ -10,7 +10,6 @@ project's own.
 | `stall-food.glb`, `stall-drinks.glb`, `stall-information.glb`, `stall-toilets.glb` | Coaster Kit | CC0 1.0 |
 | `park-bench.glb`, `park-bin.glb`, `park-flowers.glb` | Coaster Kit (`bench`, `trash`, `flowers`) | CC0 1.0 |
 | `coaster-car.glb`, `coaster-car-front.glb` | Coaster Kit (`coaster-train`, `coaster-train-front`) | CC0 1.0 |
-| `park-fence.glb` | Coaster Kit (`queue-straight`) | CC0 1.0 |
 | `Textures/colormap.png` | Coaster Kit | CC0 1.0 |
 
 `Textures/colormap.png` is not optional. The Coaster Kit's GLBs reference it

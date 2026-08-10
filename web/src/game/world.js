@@ -19,6 +19,7 @@ import {
   Vector3 as V3,
   Color as Col,
   Quaternion as Quat3,
+  Box3,
   Group as Grp,
   Mesh as Mesh,
   Sprite as Sprite3,
@@ -2541,6 +2542,7 @@ class Game {
     this.buildParkBridge();
     this.buildPark();
     this.buildCoaster();
+    this.auditParkBuilt();
     this.buildCave();
     this.buildCat();
     this.initLightPool(IS_TOUCH ? 4 : 8);
@@ -4506,36 +4508,112 @@ class Game {
     return problems;
   }
 
-  /* ---- the railing round the shore ----
-     A flat disc of grass ending in a cliff reads as a placeholder however much
-     is standing on it. A fence gives the island an edge you can see from the
-     bridge and tells you where the ground stops before you find out by
-     falling. Queue railing from the same kit as everything else here.
+  /* ---- after the fact ----
+     auditPark() checks the plan; this checks what actually got built, which
+     is not the same thing and is where the surprises live. Anything on the
+     island whose geometry reaches below the ground it stands on, or which
+     ends up outside the wall, gets named. Run at the end of the build so it
+     sees the props the plan never mentions — the wall, the dressing, the
+     coaster's own supports.
 
-     Set back from the true edge rather than laid on it: the outline is noisy,
-     and a rail following it exactly ends up half over the water wherever the
-     shore dips in. */
-  buildParkFence() {
-    const N = IS_TOUCH ? 44 : 76;
-    const posts = [];
+     Reports and does not fix. A prop three centimetres into a slope is not
+     worth moving automatically, and something a metre under is a bug I want
+     to see the name of rather than have quietly nudged. */
+  auditParkBuilt() {
+    /* Inside the wall only. The first version took everything within 1.15
+       park radii and duly reported the boardwalk's piles as buried and the
+       sea's sun lane as 124 metres under — both true and neither a problem,
+       because they are over water on purpose. An audit that cries about
+       correct things is one you learn to ignore. */
+    const below = [];
+    this.scene.traverse(o => {
+      if (!o.isMesh || !o.geometry) return;
+      const p = new V3();
+      o.getWorldPosition(p);
+      const a = Math.atan2(p.z - PARK.z, p.x - PARK.x);
+      const d = Math.hypot(p.x - PARK.x, p.z - PARK.z);
+      if (d > parkEdge(a) - 4) return;               // outside the wall: not ours
+      /* and not the boardwalk, which crosses the shore on purpose and stands
+         on piles driven into the seabed. Third time this filter has been
+         wrong: "on the island" is a harder question than it looks, and every
+         version of it that was written from the centre outwards caught
+         something that was over water by design. */
+      const span = SPANS[1];
+      const t = clamp01(spanT(span, p.x, p.z));
+      const bx = span.a.x + (span.b.x - span.a.x) * t, bz = span.a.z + (span.b.z - span.a.z) * t;
+      if (Math.hypot(p.x - bx, p.z - bz) < span.half + 6) return;
+      const ground = heightAt(p.x, p.z);
+      /* Box3 in world space, not the geometry's own box offset by position.
+         That shortcut ignores rotation, and every flat disc here is a circle
+         built in XY and laid down with rx=-90 — so its local min.y is zero
+         and its real extent is on another axis entirely. It reported the
+         midway paving as thirteen metres underground. */
+      const lowest = new Box3().setFromObject(o).min.y;
+      if (lowest < ground - 0.6)
+        below.push(`${o.geometry.type} at ${d.toFixed(0)}m, ${(ground - lowest).toFixed(1)}m under`);
+    });
+    if (below.length) console.warn(`[park] ${below.length} below ground: ${below.slice(0, 8).join(" | ")}`);
+    else console.info("[park] nothing inside the wall is below ground");
+    return { below };
+  }
+
+  /* ---- the wall round the park ----
+     A railing was the first attempt and it went in lying on its side: the kit
+     tile was stretched along X on the assumption its rail ran that way, which
+     was never checked. This is built from the chord instead — each segment
+     spans the gap between two points on the shore and is oriented by the
+     direction between them, so there is no axis left to guess wrong.
+
+     A wall rather than a fence because that is what a park has: you are meant
+     to arrive through the gate, and something you can see over but not step
+     through says that better than posts do.
+
+     Set back from the true edge: the outline is noisy and a wall following it
+     exactly ends up over the water wherever the shore dips in. */
+  buildParkWall() {
+    const N = IS_TOUCH ? 40 : 64;
+    const INSET = 4, H = 2.2;
+    const face = this.detail(this.mat(0xb9a284, { roughness: .92 }), 2.4, .15);
+    const cap = this.mat(0x8c6f52, { roughness: .85, flatShading: true });
+    const pier = this.detail(this.mat(0x907058, { roughness: .9 }), 2.2, .16);
+
+    const gateA = Math.atan2(PARK_B.z - PARK.z, PARK_B.x - PARK.x);
+    const on = a => {
+      const r = parkEdge(a) - INSET;
+      return { x: PARK.x + Math.cos(a) * r, z: PARK.z + Math.sin(a) * r };
+    };
+    const gap = a => Math.abs(((a - gateA) + Math.PI * 3) % (Math.PI * 2) - Math.PI) < .3;
+
+    let built = 0;
     for (let i = 0; i < N; i++) {
-      const a = i / N * Math.PI * 2;
-      const r = parkEdge(a) - 3.4;
-      const x = PARK.x + Math.cos(a) * r, z = PARK.z + Math.sin(a) * r;
-      /* leave the gate its gap: nobody fences off their own entrance */
-      const toGate = Math.abs(((a - Math.atan2(PARK_B.z - PARK.z, PARK_B.x - PARK.x)) + Math.PI * 3) % (Math.PI * 2) - Math.PI);
-      if (toGate < .22) continue;
-      const G = getModel("park-fence");
-      /* each tile is a metre wide, so it has to be stretched to close the gap
-         to its neighbour or the ring comes out as a dotted line */
-      const step = 2 * Math.PI * r / N;
-      G.position.set(x, PARK_Y, z);
-      G.rotation.y = -a + Math.PI / 2;
-      G.scale.set(step * 1.08, 1.6, 1);
-      this.scene.add(G); this.outdoorOnly.push(G);
-      posts.push(G);
+      const a0 = i / N * Math.PI * 2, a1 = (i + 1) / N * Math.PI * 2;
+      if (gap(a0) || gap(a1)) continue;
+      const p0 = on(a0), p1 = on(a1);
+      const dx = p1.x - p0.x, dz = p1.z - p0.z;
+      const len = Math.hypot(dx, dz);
+      const mx = (p0.x + p1.x) / 2, mz = (p0.z + p1.z) / 2;
+      /* orientation comes from the chord, not from an assumption about which
+         way the geometry was authored */
+      const ry = Math.atan2(dx, dz);
+      const g = new Grp(); g.position.set(mx, PARK_Y, mz); g.rotation.y = ry;
+      this.scene.add(g); this.outdoorOnly.push(g);
+      /* the wall itself, plus a coping course so the top edge catches light */
+      this.m(new BoxGeo(.5, H, len + .12), face, 0, H / 2, 0, { parent: g, recv: true });
+      this.m(new BoxGeo(.72, .18, len + .12), cap, 0, H + .09, 0, { parent: g, recv: true });
+      /* a pier every fourth segment, which is what stops a long run reading
+         as a ribbon */
+      if (i % 4 === 0) {
+        this.m(new BoxGeo(.86, H + .55, .86), pier, 0, (H + .55) / 2, -len / 2, { parent: g, recv: true });
+        this.m(new BoxGeo(1.02, .2, 1.02), cap, 0, H + .65, -len / 2, { parent: g });
+        this.m(new SphGeo(.22, 10, 8), new StdMat({ color: 0xffd9a0,
+          emissive: new Col(0xffb96a), emissiveIntensity: .9, roughness: .3 }),
+          0, H + 1, -len / 2, { parent: g, cast: false });
+      }
+      /* it has to stop you, or it is scenery pretending to be a boundary */
+      this.sbox(.6, H, len, mx, PARK_Y + H / 2, mz, ry);
+      built++;
     }
-    return posts;
+    return built;
   }
 
   /* ---- a kiosk from the kit ----
@@ -4657,7 +4735,7 @@ class Game {
     this.scene.add(track);
     this.outdoorOnly.push(track);
 
-    this.buildParkFence();
+    this.buildParkWall();
     this.buildCoasterStation();
     this.buildCoasterTrain();
   }
@@ -4673,8 +4751,13 @@ class Game {
 
     /* a platform beside the track, not under it */
     this.m(new BoxGeo(2.6, .3, 9), deck, -2.1, f.p.y - .5, 0, { parent: G, recv: true });
+    /* Legs from the ground up to the deck, not from y=0. This was written
+       when the coaster stood on the main island where the ground is zero;
+       out here the park's surface is at PARK_Y and three metres of every leg
+       was underneath it. */
+    const legTop = f.p.y - .5, legH = legTop - PARK_Y;
     for (let i = 0; i < 4; i++)
-      this.m(new CylGeo(.16, .2, f.p.y, 6), wood, -2.1, (f.p.y - .5) / 2, -3.6 + i * 2.4, { parent: G });
+      this.m(new CylGeo(.16, .2, legH, 6), wood, -2.1, PARK_Y + legH / 2, -3.6 + i * 2.4, { parent: G });
     this.sbox(2.6, .6, 9, f.p.x - Math.cos(ang) * 2.1, f.p.y - .5, f.p.z + Math.sin(ang) * 2.1, ang);
     /* posts and a canopy, so it reads as a station and not as a jetty */
     for (const s of [-1, 1]) for (const zz of [-3.6, 3.6])
@@ -4699,7 +4782,7 @@ class Game {
     const zx = f.p.x - Math.cos(ang) * 3.4, zz2 = f.p.z + Math.sin(ang) * 3.4;
     const ring = this.m(new RingGeo(3, 3.6, 36),
       this.bmat(new Col(AMBER).getHex(), { transparent: true, opacity: .35, side: SIDE_DOUBLE }),
-      zx, .09, zz2, { rx: -Math.PI / 2, cast: false });
+      zx, PARK_Y + .09, zz2, { rx: -Math.PI / 2, cast: false });
     const zone = { x: zx, z: zz2, r: 4.2, meta, ring, discovered: false };
     this.zones.push(zone);
     this.anims.push(t => {
