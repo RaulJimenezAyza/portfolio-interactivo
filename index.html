@@ -5920,94 +5920,10 @@ function fbm(x, y, oct = 4) {
   return sum / norm;
 }
 
-/* ============================================================
-   THE COASTER
-
-   A closed circuit on the south-west shoulder of the island, far
-   enough from every temple and every road that nothing has to move
-   to make room for it, and high enough on the hillside that the
-   lift hill is visible from the plaza.
-
-   The track is a Catmull-Rom spline through fourteen control points
-   given as (radius, height) around a circle: a station, a chain lift
-   up to sixteen metres, a first drop, a wide banked turn out to the
-   far radius, then two camelbacks back down to the platform. The
-   shape lives in data because every other part of the coaster —
-   rails, sleepers, supports, the train, the ride camera — is derived
-   from the same curve, so moving a number here moves all of it.
-   ============================================================ */
-/* Site chosen against three constraints at once, because eyeballing it put
-   the first attempt eight metres out to sea and its platform square in the
-   middle of the road to the Great Warehouse: the whole ring has to sit inside
-   the coastline with margin, no temple precinct may fall within its radius,
-   and it wants to be far enough from the plaza to be a place you go rather
-   than a thing in the way. The spin puts the station beside that road instead
-   of across it — near enough to see from the path, clear of the walking line. */
-const COASTER = { x: -34, z: -19 };
-const COASTER_ROT = .55;
-/* [radius, height] — the lift crest is the highest point and everything
-   downstream of it trades that height back for speed */
-const COASTER_SPEC = [
-  [17.0, 3.4], [17.4, 3.5], [16.6, 8.0], [15.8, 16.2], [16.2, 15.4], [17.9, 5.2],
-  [20.0, 9.2], [20.4, 3.6], [19.1, 8.2], [17.0, 2.6], [15.0, 6.8], [14.6, 3.0],
-  [15.4, 5.0], [16.6, 3.5]
-];
-/* Filled in by initCoasterTrack() rather than at module load, because the
-   heights are measured from the ground and heightAt() is not defined yet at
-   this point in the file — flatMask, which it depends on, needs FLAT_DISCS
-   below. */
-let COASTER_CTRL = COASTER_SPEC.map(([r, h], i) => {
-  const a = i / COASTER_SPEC.length * Math.PI * 2 + COASTER_ROT;
-  return { x: COASTER.x + Math.cos(a) * r, y: h, z: COASTER.z + Math.sin(a) * r };
-});
-function initCoasterTrack() {
-  /* The listed heights are the shape; the ground has the final say. This
-     hillside rises ten metres across the circuit, so a track laid at the
-     nominal heights would have run underground for a third of the lap. */
-  COASTER_CTRL = COASTER_CTRL.map(p => ({ ...p, y: Math.max(p.y, heightAt(p.x, p.z) + 3.4) }));
-}
-
-/* Closed Catmull-Rom. Written out rather than pulled from three: this build
-   has no CatmullRomCurve3, and a uniform spline through evenly spaced points
-   is six lines anyway. */
-function coasterAt(t) {
-  const P = COASTER_CTRL, n = P.length;
-  const f = ((t % 1) + 1) % 1 * n, i = Math.floor(f), s = f - i;
-  const p0 = P[(i - 1 + n) % n], p1 = P[i % n], p2 = P[(i + 1) % n], p3 = P[(i + 2) % n];
-  const s2 = s * s, s3 = s2 * s;
-  const h = (a, b, c, d) => .5 * (2 * b + (-a + c) * s + (2 * a - 5 * b + 4 * c - d) * s2 + (-a + 3 * b - 3 * c + d) * s3);
-  return { x: h(p0.x, p1.x, p2.x, p3.x), y: h(p0.y, p1.y, p2.y, p3.y), z: h(p0.z, p1.z, p2.z, p3.z) };
-}
-
-/* Position, forward, right and up at a point on the circuit, with the track
-   banked into its own turns. Without the bank a coaster is a garden hose:
-   the roll is most of what makes a curve read as speed. */
-function coasterFrame(t) {
-  const e = 1 / 900;
-  const p = coasterAt(t), a = coasterAt(t - e), b = coasterAt(t + e);
-  let tx = b.x - a.x, ty = b.y - a.y, tz = b.z - a.z;
-  const tl = Math.hypot(tx, ty, tz) || 1;
-  tx /= tl; ty /= tl; tz /= tl;
-  /* right = forward x world-up, then up = right x forward */
-  let rx = tz, ry = 0, rz = -tx;
-  const rl = Math.hypot(rx, rz) || 1;
-  rx /= rl; rz /= rl;
-  /* signed curvature in the horizontal plane, from how fast the tangent turns */
-  const ax = a.x - p.x, az = a.z - p.z, bx = b.x - p.x, bz = b.z - p.z;
-  const curl = (ax * bz - az * bx) / (e * e * 4e4);
-  const bank = Math.max(-.75, Math.min(.75, curl * 1.5));
-  const cb = Math.cos(bank), sb = Math.sin(bank);
-  let ux = ry * tz - rz * ty, uy = rz * tx - rx * tz, uz = rx * ty - ry * tx;
-  const nrx = rx * cb + ux * sb, nry = ry * cb + uy * sb, nrz = rz * cb + uz * sb;
-  ux = ux * cb - rx * sb; uy = uy * cb - ry * sb; uz = uz * cb - rz * sb;
-  return { p, tx, ty, tz, rx: nrx, ry: nry, rz: nrz, ux, uy, uz };
-}
 
 /* areas that must stay dead flat: plaza, playground, pond, every
    temple, and a corridor along each path out of the plaza */
 const FLAT_DISCS = [
-  { x: COASTER.x + Math.cos(COASTER_ROT) * 20.4,
-    z: COASTER.z + Math.sin(COASTER_ROT) * 20.4, r: 7, fade: 6 },   // coaster station
   { x: 0, z: 0, r: 19, fade: 9 },       // plaza + fountain
   { x: 15, z: 5, r: 15, fade: 7 },      // physics playground
   /* the second crate pyramid used to stand at (-13,-11), four metres past the
@@ -6149,8 +6065,15 @@ const bridgeDeckY = t => BRIDGE_Y0 + (ISLET_Y - BRIDGE_Y0) * t;
    functions: terrainHeight() is what gets displaced into the mesh and
    coloured, heightAt() is what the cat rides. */
 function bridgeHeight(x, z) {
-  const t = bridgeT(x, z);
-  return bridgeSide(x, z, t) <= BRIDGE_HALF + 1.2 ? bridgeDeckY(t) : null;
+  let best = null;
+  for (const s of SPANS) {
+    const t = clamp01(spanT(s, x, z));
+    const px = s.a.x + (s.b.x - s.a.x) * t, pz = s.a.z + (s.b.z - s.a.z) * t;
+    if (Math.hypot(x - px, z - pz) > s.half + 1.2) continue;
+    const y = s.y0 + (s.y1 - s.y0) * t;
+    if (best === null || y > best) best = y;
+  }
+  return best;
 }
 
 /* Kept apart from islandHeight so the vertex colouring can tell the two
@@ -6175,10 +6098,153 @@ function isletHeight(x, z) {
   return h;
 }
 
+/* ============================================================
+   THE PARK ISLAND
+
+   A second island offshore, flat and low, carrying everything that
+   is a ride rather than a place: the coaster, a wheel and a
+   carousel. It exists because those things fought the island for
+   room — the coaster alone needed a fifty-metre circuit that had to
+   miss seven temples, eight roads and a plaza, and the only sites
+   that cleared all of it were out on headlands nobody walks to.
+   Off the coast there is nothing to miss.
+
+   Same construction as the islet: a bearing, a bridgehead on an
+   empty stretch of beach, a rope bridge, and an outline that both
+   the height field and the confinement clamp read from, so the edge
+   you can see is the edge you can walk to.
+   ============================================================ */
+const PARK_BRG = -78.3 * Math.PI / 180;      // the widest gap between roads
+const PU = { x: Math.cos(PARK_BRG), z: Math.sin(PARK_BRG) };
+const atP = r => ({ x: PU.x * r, z: PU.z * r });
+const PARK_R = 44, PARK_Y = 3;
+const PARK = atP(158);
+const PARK_A = atP(coastRadius(PARK_BRG) - 5);
+const PARK_B = atP(158 - PARK_R + 8);
+const PARK_HALF = 3;
+const PARK_ROAD = { x1: 0, z1: 0, x2: PARK_A.x, z2: PARK_A.z };
+PATH_LINES.push(PARK_ROAD);
+const PARK_Y0 = islandHeight(PARK_A.x, PARK_A.z) + .35;
+/* flatter outline than the islet's: this one has a fairground laid out on it
+   and a scalloped edge would leave the coaster's outer turn hanging in air */
+const parkEdge = a => PARK_R * (.93 + .14 * fbm(Math.cos(a) * 2.4 - 7, Math.sin(a) * 2.4 + 5, 2));
+
+function parkHeight(x, z) {
+  const d = Math.hypot(x - PARK.x, z - PARK.z);
+  if (d > PARK_R * 1.2 + 14) return null;
+  const edge = parkEdge(Math.atan2(z - PARK.z, x - PARK.x));
+  return PARK_Y - Math.max(0, d - (edge - 2)) * 2.4;
+}
+
+/* Every walkable span in the world. Two rope bridges now, and the deck
+   arithmetic was written once for one of them — pulling it into a list is
+   what stops the second bridge being a copy of the first with the names
+   changed, which is how the first one grew its stuck-at-the-abutment bug. */
+const SPANS = [
+  { a: BRIDGE_A, b: BRIDGE_B, half: BRIDGE_HALF, y0: BRIDGE_Y0, y1: ISLET_Y },
+  { a: PARK_A, b: PARK_B, half: PARK_HALF, y0: PARK_Y0, y1: PARK_Y }
+];
+/* raw t: negative or past one means you have stepped off the end of the span */
+function spanT(s, x, z) {
+  const dx = s.b.x - s.a.x, dz = s.b.z - s.a.z;
+  return ((x - s.a.x) * dx + (z - s.a.z) * dz) / (dx * dx + dz * dz);
+}
+
+/* ============================================================
+   THE COASTER
+
+   A closed circuit on the park island, sited so its lift hill is
+   the thing you see across the water from the beach.
+
+   The track is a Catmull-Rom spline through fourteen control points
+   given as (radius, height) around a circle: a station, a chain lift
+   up to sixteen metres, a first drop, a wide banked turn out to the
+   far radius, then two camelbacks back down to the platform. The
+   shape lives in data because every other part of the coaster —
+   rails, sleepers, supports, the train, the ride camera — is derived
+   from the same curve, so moving a number here moves all of it.
+   ============================================================ */
+/* Site chosen against three constraints at once, because eyeballing it put
+   the first attempt eight metres out to sea and its platform square in the
+   middle of the road to the Great Warehouse: the whole ring has to sit inside
+   the coastline with margin, no temple precinct may fall within its radius,
+   and it wants to be far enough from the plaza to be a place you go rather
+   than a thing in the way. The spin puts the station beside that road instead
+   of across it — near enough to see from the path, clear of the walking line. */
+/* On the park island now. It used to sit on the main island's south-west
+   shoulder, where placing it meant satisfying four constraints at once and
+   the answer was always "somewhere you would rather not walk". Out here the
+   only thing it has to miss is the wheel and the carousel. */
+const COASTER = { x: PARK.x - PU.x * 6, z: PARK.z - PU.z * 6 };
+const COASTER_ROT = .55;
+/* [radius, height] — the lift crest is the highest point and everything
+   downstream of it trades that height back for speed */
+const COASTER_SPEC = [
+  [17.0, 3.4], [17.4, 3.5], [16.6, 8.0], [15.8, 16.2], [16.2, 15.4], [17.9, 5.2],
+  [20.0, 9.2], [20.4, 3.6], [19.1, 8.2], [17.0, 2.6], [15.0, 6.8], [14.6, 3.0],
+  [15.4, 5.0], [16.6, 3.5]
+];
+/* Filled in by initCoasterTrack() rather than at module load, because the
+   heights are measured from the ground and heightAt() is not defined yet at
+   this point in the file — flatMask, which it depends on, needs FLAT_DISCS
+   below. */
+let COASTER_CTRL = COASTER_SPEC.map(([r, h], i) => {
+  const a = i / COASTER_SPEC.length * Math.PI * 2 + COASTER_ROT;
+  return { x: COASTER.x + Math.cos(a) * r, y: h, z: COASTER.z + Math.sin(a) * r };
+});
+function initCoasterTrack() {
+  /* The listed heights are the shape; the ground has the final say. This
+     hillside rises ten metres across the circuit, so a track laid at the
+     nominal heights would have run underground for a third of the lap. */
+  COASTER_CTRL = COASTER_CTRL.map(p => ({ ...p, y: Math.max(p.y + PARK_Y, heightAt(p.x, p.z) + 2) }));
+}
+
+/* Closed Catmull-Rom. Written out rather than pulled from three: this build
+   has no CatmullRomCurve3, and a uniform spline through evenly spaced points
+   is six lines anyway. */
+function coasterAt(t) {
+  const P = COASTER_CTRL, n = P.length;
+  const f = ((t % 1) + 1) % 1 * n, i = Math.floor(f), s = f - i;
+  const p0 = P[(i - 1 + n) % n], p1 = P[i % n], p2 = P[(i + 1) % n], p3 = P[(i + 2) % n];
+  const s2 = s * s, s3 = s2 * s;
+  const h = (a, b, c, d) => .5 * (2 * b + (-a + c) * s + (2 * a - 5 * b + 4 * c - d) * s2 + (-a + 3 * b - 3 * c + d) * s3);
+  return { x: h(p0.x, p1.x, p2.x, p3.x), y: h(p0.y, p1.y, p2.y, p3.y), z: h(p0.z, p1.z, p2.z, p3.z) };
+}
+
+/* Position, forward, right and up at a point on the circuit, with the track
+   banked into its own turns. Without the bank a coaster is a garden hose:
+   the roll is most of what makes a curve read as speed. */
+function coasterFrame(t) {
+  const e = 1 / 900;
+  const p = coasterAt(t), a = coasterAt(t - e), b = coasterAt(t + e);
+  let tx = b.x - a.x, ty = b.y - a.y, tz = b.z - a.z;
+  const tl = Math.hypot(tx, ty, tz) || 1;
+  tx /= tl; ty /= tl; tz /= tl;
+  /* right = world-up x forward, then up = forward x right */
+  let rx = tz, ry = 0, rz = -tx;
+  const rl = Math.hypot(rx, rz) || 1;
+  rx /= rl; rz /= rl;
+  /* signed curvature in the horizontal plane, from how fast the tangent turns */
+  const ax = a.x - p.x, az = a.z - p.z, bx = b.x - p.x, bz = b.z - p.z;
+  const curl = (ax * bz - az * bx) / (e * e * 4e4);
+  const bank = Math.max(-.75, Math.min(.75, curl * 1.5));
+  const cb = Math.cos(bank), sb = Math.sin(bank);
+  /* forward x right, not right x forward. Crossed the other way this comes
+     out pointing at the ground: the rails were slung under their sleepers,
+     the cars hung below the track, the bank rolled into the outside of every
+     turn and the ride camera was upside down. Take t = +Z, up = +Y: right
+     lands on +X, and (+X) x (+Z) is -Y. */
+  let ux = ty * rz - tz * ry, uy = tz * rx - tx * rz, uz = tx * ry - ty * rx;
+  const nrx = rx * cb + ux * sb, nry = ry * cb + uy * sb, nrz = rz * cb + uz * sb;
+  ux = ux * cb - rx * sb; uy = uy * cb - ry * sb; uz = uz * cb - rz * sb;
+  return { p, tx, ty, tz, rx: nrx, ry: nry, rz: nrz, ux, uy, uz };
+}
+
 function terrainHeight(x, z) {
   const i = isletHeight(x, z);
+  const p = parkHeight(x, z);
   const h = islandHeight(x, z);
-  return i === null ? h : Math.max(h, i);
+  return Math.max(h, i === null ? -1e9 : i, p === null ? -1e9 : p);
 }
 
 function heightAt(x, z) {
@@ -6200,18 +6266,17 @@ function confineOutdoors(p) {
      on the spot, one step short of the beach. Past an abutment you are on
      land, so the span clamp has to let go and the island/islet clamps take
      over instead. */
-  const bdx = BRIDGE_B.x - BRIDGE_A.x, bdz = BRIDGE_B.z - BRIDGE_A.z;
-  const tRaw = ((p.x - BRIDGE_A.x) * bdx + (p.z - BRIDGE_A.z) * bdz) / (bdx * bdx + bdz * bdz);
-  if (tRaw > 0 && tRaw < 1) {
-    const px = BRIDGE_A.x + bdx * tRaw, pz = BRIDGE_A.z + bdz * tRaw;
+  for (const s of SPANS) {
+    const tRaw = spanT(s, p.x, p.z);
+    if (tRaw <= 0 || tRaw >= 1) continue;
+    const px = s.a.x + (s.b.x - s.a.x) * tRaw, pz = s.a.z + (s.b.z - s.a.z) * tRaw;
     const side = Math.hypot(p.x - px, p.z - pz);
-    if (side <= BRIDGE_HALF + 1.6) {
-      if (side > BRIDGE_HALF) {                  // slide back onto the planks
-        const k = BRIDGE_HALF / side;
-        p.x = px + (p.x - px) * k; p.z = pz + (p.z - pz) * k;
-      }
-      return;
+    if (side > s.half + 1.6) continue;
+    if (side > s.half) {                         // slide back onto the planks
+      const k = s.half / side;
+      p.x = px + (p.x - px) * k; p.z = pz + (p.z - pz) * k;
     }
+    return;
   }
   const dIsl = Math.hypot(p.x - ISLET.x, p.z - ISLET.z);
   if (dIsl < ISLET_R * 1.2 + 4) {
@@ -6219,6 +6284,15 @@ function confineOutdoors(p) {
     if (dIsl > edge) {
       const k = edge / dIsl;
       p.x = ISLET.x + (p.x - ISLET.x) * k; p.z = ISLET.z + (p.z - ISLET.z) * k;
+    }
+    return;
+  }
+  const dPark = Math.hypot(p.x - PARK.x, p.z - PARK.z);
+  if (dPark < PARK_R * 1.2 + 4) {
+    const edge = parkEdge(Math.atan2(p.z - PARK.z, p.x - PARK.x)) - 1.5;
+    if (dPark > edge) {
+      const k = edge / dPark;
+      p.x = PARK.x + (p.x - PARK.x) * k; p.z = PARK.z + (p.z - PARK.z) * k;
     }
     return;
   }
@@ -6594,6 +6668,8 @@ class Game {
     this.buildTemples();
     this.buildFish();
     this.buildPier();
+    this.buildParkBridge();
+    this.buildPark();
     this.buildCoaster();
     this.buildCave();
     this.buildCat();
@@ -7118,8 +7194,9 @@ class Game {
        A subdivided plane displaced by heightAt(), tinted per vertex so sand,
        grass, rock and the odd snowy top come from the shape itself instead of
        a texture that would stretch over the slopes. */
-    /* wide enough to contain the islet and its crag, which reach r=168 */
-    const SEG = IS_TOUCH ? 128 : 224, SIZE = 372;
+    /* wide enough to contain the islet and its crag at r=168 and the park
+       island, whose skirt reaches r=220 */
+    const SEG = IS_TOUCH ? 148 : 256, SIZE = 460;
     const geo = new PlaneGeo(SIZE, SIZE, SEG, SEG);
     const pos = geo.attributes.position;
     const colors = new Float32Array(pos.count * 3);
@@ -7153,6 +7230,18 @@ class Game {
         tmp.copy(ROCK).lerp(GRASS, smoothstep(1, .3, slope) * .5);
         tmp.lerp(SNOW, smoothstep(17, 24, h));
         tmp.multiplyScalar(.8 + tint * .32);
+        colors[i * 3] = tmp.r; colors[i * 3 + 1] = tmp.g; colors[i * 3 + 2] = tmp.b;
+        continue;
+      }
+      /* The park has its own ground: worn grass on top, sand around the rim.
+         Run through the island's shore gradient it comes out as one sheet of
+         wet sand a hundred metres past a coastline it has nothing to do
+         with — the same reason the islet needs its own branch. */
+      if (parkHeight(x, z) !== null && h > islandHeight(x, z)) {
+        tmp.copy(MEADOW).lerp(GRASS2, tint);
+        tmp.lerp(SAND, smoothstep(PARK_Y - .1, PARK_Y - 2.2, h));
+        tmp.lerp(WET, smoothstep(PARK_Y - 2.4, PARK_Y - 3.6, h));
+        tmp.multiplyScalar(.86 + tint * .28);
         colors[i * 3] = tmp.r; colors[i * 3 + 1] = tmp.g; colors[i * 3 + 2] = tmp.b;
         continue;
       }
@@ -8168,6 +8257,218 @@ class Game {
      segment would be a couple of thousand draw calls for one prop, and
      nothing about a rail needs its own transform — the curve already knows
      where every piece of it belongs. */
+  /* ============ the boardwalk out to the park ============
+     Not a second rope bridge. The cave islet is somewhere you arrive at, and
+     its bridge is a rickety plank thing that says so; the park is somewhere
+     that wants you to come, so its crossing is a lit timber pier with bunting
+     on it. Same walkable span underneath — SPANS carries both — but there was
+     never a reason for them to look alike. */
+  buildParkBridge() {
+    const ang = Math.atan2(PU.x, PU.z);
+    const L = Math.hypot(PARK_B.x - PARK_A.x, PARK_B.z - PARK_A.z);
+    const G = new Grp(); G.position.set(PARK_A.x, 0, PARK_A.z); G.rotation.y = ang;
+    this.scene.add(G); this.outdoorOnly.push(G);
+    const deck = new StdMat({ map: this.crateTexture(), roughness: .9 });
+    const timber = this.mat(0x6a4a2f, { roughness: .95, flatShading: true });
+    const paint = this.mat(0xd6543c, { roughness: .8, flatShading: true });
+    const dY = t => PARK_Y0 + (PARK_Y - PARK_Y0) * t;
+    const pitch = Math.atan2(PARK_Y - PARK_Y0, L);
+
+    const steps = Math.round(L / 1.1);
+    for (let i = 0; i <= steps; i++) {
+      const t = i / steps, lz = t * L, y = dY(t);
+      this.m(new BoxGeo(PARK_HALF * 2, .18, 1.06), i % 4 ? deck : timber, 0, y - .09, lz,
+        { parent: G, recv: true });
+      /* piles every third bay, down into the water */
+      if (i % 3 === 0) for (const s of [-1, 1])
+        this.m(new CylGeo(.2, .24, y + 6, 6), timber, s * (PARK_HALF - .3), (y - 6) / 2, lz, { parent: G });
+      /* posts and a rope every other bay */
+      if (i % 2 === 0) for (const s of [-1, 1])
+        this.m(new CylGeo(.09, .11, 1.1, 6), timber, s * PARK_HALF, y + .55, lz, { parent: G });
+    }
+    for (const s of [-1, 1]) {
+      const mid = L / 2;
+      this.m(new BoxGeo(.1, .1, L), timber, s * PARK_HALF, dY(.5) + 1.05, mid,
+        { parent: G, rx: -pitch, cast: false });
+      /* strings of little flags, the whole way across */
+      for (let i = 0; i < steps; i += 2) {
+        const t = i / steps;
+        this.m(new ConeGeo(.13, .3, 3), this.bmat([GREEN, AMBER, PINK, BLUE, CYAN][i % 5], { side: SIDE_DOUBLE }),
+          s * PARK_HALF, dY(t) + .95, t * L, { parent: G, rx: Math.PI, cast: false });
+      }
+    }
+    /* colliders so loose props do not drop through */
+    const mx = PARK_A.x + (PARK_B.x - PARK_A.x) * .5, mz = PARK_A.z + (PARK_B.z - PARK_A.z) * .5;
+    this.sbox(PARK_HALF * 2, .5, L + 2, mx, dY(.5) - .25, mz, ang, -pitch);
+    for (const s of [-1, 1]) {
+      const off = PARK_HALF + 1;
+      this.sbox(.4, .6, L + 2, mx + Math.cos(ang) * s * off, dY(.5) + .3, mz - Math.sin(ang) * s * off, ang, -pitch);
+    }
+
+    /* the gate you walk through at the far end */
+    for (const s of [-1, 1])
+      this.m(new CylGeo(.3, .38, 6, 8), paint, s * (PARK_HALF + .6), PARK_Y + 3, L + 2.2, { parent: G, recv: true });
+    this.m(new BoxGeo(PARK_HALF * 2 + 2.4, .9, .5), paint, 0, PARK_Y + 6.2, L + 2.2, { parent: G });
+    const gate = this.makeLabel(state.lang === "es" ? "PARQUE DEL GATO" : "CAT'S FUNFAIR", "#ffd76a", 1.7);
+    gate.position.set(0, PARK_Y + 8.2, L + 2.2); G.add(gate);
+    for (const s of [-1, 1]) {
+      const w = { x: PARK_A.x + Math.cos(ang) * s * (PARK_HALF + .6) + Math.sin(ang) * (L + 2.2),
+                  z: PARK_A.z - Math.sin(ang) * s * (PARK_HALF + .6) + Math.cos(ang) * (L + 2.2) };
+      this.addLight(w.x, PARK_Y + 5.4, w.z, 0xffb371, 8, 22);
+      this.addOccluder(w.x, PARK_Y + 3, w.z, 1);
+    }
+  }
+
+  /* ============ the fairground ============ */
+  buildPark() {
+    const perp = { x: -PU.z, z: PU.x };
+    const at = (fwd, side) => ({ x: PARK.x + PU.x * fwd + perp.x * side,
+                                 z: PARK.z + PU.z * fwd + perp.z * side });
+    /* a worn midway between the gate and the rides */
+    const mid = at(20, 0);
+    this.m(new CircleGeo(13, 40), this.detail(this.mat(0x6f6555, { roughness: .95 }), 2.6, .17),
+      mid.x, PARK_Y + .06, mid.z, { rx: -Math.PI / 2, cast: false, recv: true });
+
+    /* Pulled in from twenty-five: the rim is fourteen metres, so out there
+       half the wheel hung over the water. */
+    const wheel = at(2, 21);
+    /* The rim lies in the group's ZY plane, so the wheel's face normal is its
+       local +X. Aim that at the middle of the park or you get a fourteen-metre
+       wheel presented edge-on to everyone walking the midway. */
+    this.ferrisWheel(wheel.x, wheel.z, Math.atan2(perp.z, -perp.x));
+    const car = at(4, -23);
+    this.carousel(car.x, car.z);
+
+    /* kiosks along the midway, because a fair with only rides is a car park */
+    const stallCols = [0xd6543c, 0x3f8f6a, 0x3f6aa8];
+    for (let i = 0; i < 3; i++) {
+      const s = at(16 + i * 5, (i % 2 ? 1 : -1) * (9 + i));
+      this.stall(s.x, s.z, Math.atan2(PARK.x - s.x, PARK.z - s.z), stallCols[i]);
+    }
+    /* lamps down the midway */
+    for (let i = 0; i < 6; i++) {
+      const a = i / 6 * Math.PI * 2;
+      const p = { x: mid.x + Math.cos(a) * 12.5, z: mid.z + Math.sin(a) * 12.5 };
+      const g = new Grp(); g.position.set(p.x, PARK_Y, p.z); this.scene.add(g);
+      this.outdoorOnly.push(g);
+      this.m(new CylGeo(.09, .13, 3.2, 7), this.mat(0x232028, { roughness: .6, metalness: .5 }),
+        0, 1.6, 0, { parent: g });
+      this.m(new SphGeo(.24, 10, 8), new StdMat({ color: 0xffd9a0, emissive: new Col(0xffb96a),
+        emissiveIntensity: .9, roughness: .3 }), 0, 3.3, 0, { parent: g, cast: false });
+      g.add(this.glowSprite(0xffb96a, 1.8, new V3(0, 3.3, 0)));
+      if (i % 2 === 0) this.addLight(p.x, PARK_Y + 3.3, p.z, 0xffb371, 6, 18);
+    }
+  }
+
+  /* ---- ferris wheel ----
+     Two rims in the XY plane with the hub on Z, which is the one orientation
+     TorusGeometry gives you for free. The gondolas hang off the rim and are
+     counter-rotated every frame: parented to a turning wheel they would ride
+     round upside down at the top, which is a fairground ride nobody survives. */
+  ferrisWheel(x, z, ry) {
+    const R = 14, W = 2.6, N = 12;
+    const G = new Grp(); G.position.set(x, PARK_Y, z); G.rotation.y = ry;
+    this.scene.add(G); this.outdoorOnly.push(G);
+    const steel = this.mat(0xb8bcc8, { roughness: .5, metalness: .35, flatShading: true });
+    const paint = this.mat(0xd6543c, { roughness: .7, flatShading: true });
+
+    /* A-frames either side, carrying the axle */
+    for (const s of [-1, 1]) for (const d of [-1, 1])
+      this.m(new CylGeo(.28, .38, R + 2.4, 6), steel, s * W, (R + 2.4) / 2 - .6, d * 5.5,
+        { parent: G, rx: -d * .38, recv: true });
+    const hub = new Grp(); hub.position.y = R + 1.2; G.add(hub);
+    this.m(new CylGeo(.55, .55, W * 2 + .8, 10), steel, 0, R + 1.2, 0, { parent: G, rz: Math.PI / 2 });
+
+    const spin = new Grp(); hub.add(spin);
+    for (const s of [-1, 1])
+      this.m(new TorusGeo(R, .16, 6, 40), paint, s * W, 0, 0, { parent: spin, ry: Math.PI / 2 });
+    const cabs = [];
+    for (let i = 0; i < N; i++) {
+      const a = i / N * Math.PI * 2;
+      const cx = Math.cos(a) * R, cy = Math.sin(a) * R;
+      for (const s of [-1, 1])                                   // spokes
+        this.m(new BoxGeo(.1, R, .1), steel, s * W, cy / 2, cx / 2,
+          { parent: spin, rx: -a + Math.PI / 2, cast: false });
+      this.m(new BoxGeo(W * 2, .12, .12), steel, 0, cy, cx, { parent: spin, cast: false });
+      const cab = new Grp(); cab.position.set(0, cy, cx); spin.add(cab);
+      const col = [GREEN, AMBER, PINK, BLUE, CYAN, RED][i % 6];
+      this.m(new CylGeo(.16, .16, 1.1, 6), steel, 0, -.55, 0, { parent: cab, cast: false });
+      this.m(new BoxGeo(1.9, 1.1, 1.7), this.mat(new Col(col).getHex(), { roughness: .7, flatShading: true }),
+        0, -1.65, 0, { parent: cab, recv: true });
+      this.m(new ConeGeo(1.5, .6, 6), this.mat(0xf2efe7, { roughness: .8, flatShading: true }),
+        0, -.95, 0, { parent: cab, cast: false });
+      cabs.push(cab);
+    }
+    this.scyl(3, 6, x, PARK_Y + 3, z);
+    this.addOccluder(x, PARK_Y + R, z, R * .5);
+    this.anims.push(t => {
+      spin.rotation.x = t * .18;
+      for (const c of cabs) c.rotation.x = -spin.rotation.x;    // stay level
+    });
+  }
+
+  /* ---- carousel ---- */
+  carousel(x, z) {
+    const G = new Grp(); G.position.set(x, PARK_Y, z); this.scene.add(G);
+    this.outdoorOnly.push(G);
+    const wood = this.mat(0x8a6a48, { roughness: .9, flatShading: true });
+    const gold = this.mat(0xc9a24a, { roughness: .35, metalness: .6 });
+    const stripes = this.makeCanvas(256, 64, g => {
+      const cols = ["#e8433a", "#f5efe4", "#3f8f6a", "#f5efe4"];
+      for (let i = 0; i < 16; i++) { g.fillStyle = cols[i % 4]; g.fillRect(i * 16, 0, 16, 64); }
+    });
+    this.m(new CylGeo(7.4, 7.8, .6, 24), wood, 0, .3, 0, { parent: G, recv: true });
+    this.m(new CylGeo(.7, .9, 5.4, 12), gold, 0, 3.2, 0, { parent: G });
+    const spin = new Grp(); spin.position.y = .6; G.add(spin);
+    this.m(new ConeGeo(7.8, 2.6, 16), new StdMat({ map: stripes, roughness: .7, side: SIDE_DOUBLE }),
+      0, 6.1, 0, { parent: spin });
+    this.m(new SphGeo(.5, 10, 8), gold, 0, 7.6, 0, { parent: spin, cast: false });
+    this.m(new CylGeo(6.6, 6.6, .18, 20), wood, 0, 4.7, 0, { parent: spin, cast: false, recv: true });
+    const mounts = [];
+    for (let i = 0; i < 8; i++) {
+      const a = i / 8 * Math.PI * 2, r = 5.4;
+      const m = new Grp(); m.position.set(Math.cos(a) * r, 0, Math.sin(a) * r); spin.add(m);
+      this.m(new CylGeo(.07, .07, 4.4, 6), gold, 0, 2.5, 0, { parent: m, cast: false });
+      /* the mounts are cats, obviously */
+      const body = this.m(new SphGeo(.5, 12, 9), this.mat([0xe08840, 0xf2efe7, 0x4a4557, 0xd6543c][i % 4],
+        { roughness: .85 }), 0, 1.5, 0, { parent: m, recv: true });
+      body.scale.set(.8, .72, 1.35);
+      this.m(new SphGeo(.3, 10, 8), this.mat([0xe08840, 0xf2efe7, 0x4a4557, 0xd6543c][i % 4],
+        { roughness: .85 }), 0, 1.95, .55, { parent: m });
+      for (const s of [-1, 1])
+        this.m(new ConeGeo(.13, .26, 4), this.mat(0xe0b090, { roughness: .9 }), s * .16, 2.24, .48, { parent: m });
+      mounts.push(m);
+    }
+    this.scyl(7.8, 4, x, PARK_Y + 2, z);
+    this.addOccluder(x, PARK_Y + 4, z, 5);
+    this.addLight(x, PARK_Y + 5, z, 0xffc48a, 8, 24);
+    this.anims.push(t => {
+      spin.rotation.y = t * .5;
+      mounts.forEach((m, i) => { m.position.y = Math.sin(t * 2 + i * .8) * .45; });
+    });
+  }
+
+  /* ---- a kiosk with a striped awning ---- */
+  stall(x, z, ry, col) {
+    const G = new Grp(); G.position.set(x, PARK_Y, z); G.rotation.y = ry;
+    this.scene.add(G); this.outdoorOnly.push(G);
+    const wood = this.mat(0x7a6046, { roughness: .95, flatShading: true });
+    this.m(new BoxGeo(3.4, 2.2, 2.4), wood, 0, 1.1, 0, { parent: G, recv: true });
+    this.m(new BoxGeo(3.8, .3, .5), wood, 0, 2, 1.35, { parent: G });          // counter
+    /* the awning: alternating panels rather than a texture, so the scallop
+       reads at the size these are actually seen from */
+    for (let i = 0; i < 7; i++)
+      this.m(new BoxGeo(.52, .12, 1.7), this.mat(i % 2 ? 0xf2efe7 : col, { roughness: .8 }),
+        -1.56 + i * .52, 2.6, 1.7, { parent: G, rx: .3, cast: false, recv: true });
+    this.m(new BoxGeo(3.6, .5, .12), this.mat(col, { roughness: .8 }), 0, 3.05, .9, { parent: G });
+    for (const s of [-1, 1])
+      this.m(new CylGeo(.07, .07, 2.6, 5), wood, s * 1.6, 1.3, 2.3, { parent: G });
+    this.m(new SphGeo(.22, 10, 8), new StdMat({ color: 0xffd9a0, emissive: new Col(0xffb96a),
+      emissiveIntensity: 1, roughness: .3 }), 0, 2.9, 1.5, { parent: G, cast: false });
+    this.sbox(3.6, 2.4, 2.6, x, PARK_Y + 1.2, z, ry);
+    this.addOccluder(x, PARK_Y + 1.4, z, 2);
+  }
+
   buildCoaster() {
     initCoasterTrack();
     const N = IS_TOUCH ? 200 : 320;
