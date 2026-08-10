@@ -1,0 +1,69 @@
+# Builds the Next export and publishes it to GitHub Pages.
+#
+# The site used to be one index.html committed at the repo root, which Pages
+# served straight off the branch — no build, no pipeline, nothing to go wrong.
+# That is gone now that the world is a module and the models are a folder read
+# at build time, so the build has to happen somewhere. Here, rather than in a
+# committed out/ directory: generated output in version control goes stale the
+# first time someone forgets to run it.
+#
+# Nothing publishes until this workflow lands on main and Pages is switched to
+# "GitHub Actions" as its source in the repo settings. Until then the old
+# index.html keeps serving.
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# One deploy at a time; a queued run should replace a waiting one rather than
+# race it, but never cancel a deploy that is already halfway out.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - run: npm ci
+
+      # The scene checks run without a browser: no DOM, no WebGL, no render
+      # loop. They catch a model that floats, one that is buried and one that
+      # faces backwards, which is most of what goes wrong here.
+      - run: npm run verify
+
+      # prebuild regenerates the model manifest from whatever is in
+      # public/models, so dropping a .glb in and pushing is the whole workflow.
+      - run: npm run build
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: web/out
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
