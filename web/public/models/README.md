@@ -24,16 +24,38 @@ Get these right and a swapped model lands correctly without touching code.
 
 ## Named children
 
-A few models have moving parts. The scene looks these up by name, so keep them
-if you re-author the model:
+The scene does not assume where anything is. It asks the model, by name, and
+derives everything else from the answer — a taller lamp takes its halo up with
+it, a deeper fountain takes its ripples down. That only works if the names are
+there.
+
+Missing a name is never fatal. The part it drives stops moving and the rest of
+the game carries on; a cat with no named tail walks, sits and jumps, it just
+does not wag.
 
 | model | child | what happens to it |
 |---|---|---|
+| `cat.glb` | `head` | idle tilt, and looks up when sitting |
+| `cat.glb` | `earL`, `earR` | occasional twitch |
+| `cat.glb` | `eyeL`, `eyeR` | squashed on Y to blink |
+| `cat.glb` | `legFL`, `legFR`, `legBL`, `legBR` | pivots — the walk cycle rotates these about X, so put each origin at the shoulder or hip, not at the paw |
+| `cat.glb` | `tail0` … `tail4` | chained, each parented to the one before; the wag runs down the chain |
+| `fountain.glb` | `waterLow` | basin surface — ripples crawl over it and the falling sheets end here |
+| `fountain.glb` | `waterHigh` | upper bowl surface — spouts, spray and the statue are placed off it |
 | `ferris-wheel.glb` | `spin` | rotated about its local X |
-| `ferris-wheel.glb` | `cab*` | counter-rotated so gondolas stay level |
+| `ferris-wheel.glb` | `cab0` … `cabN` | children of `spin`, counter-rotated so the seats stay level |
 | `carousel.glb` | `spin` | rotated about Y |
-| `coaster-car.glb` | `rider` | hidden while you are the one in the seat |
-| `lamp.glb` | `bulb` | given the emissive material and the point light |
+| `carousel.glb` | `mount0` … `mountN` | children of `spin`, bob up and down |
+| `coaster-car.glb` | `rider` | hidden while you are the one in that seat |
+| `stele.glb` | `panel` | the recessed face; the temple's colour bar and name plate are placed against it |
+| `lamp.glb` | `bulb` | takes the emissive material, the glow sprite and the point light |
+
+## Variants
+
+One model answers for every instance. The coaster's lead car carries a nose
+cone the other two do not, and the procedural builder takes an index to make
+it; a file in the folder is one car and is used for all three. The train stops
+having a distinct front. That is the price of making it swappable, not a bug.
 
 ## Budget
 

@@ -2368,25 +2368,43 @@ class GradePass {
 }
 
 class Game {
-  constructor(host) {
+  /* `ctx` is react-three-fiber's renderer, scene and camera when the world is
+     mounted inside a <Canvas>, and undefined when it is standing on its own.
+     Given one it adopts all three and leaves the frame loop to whoever owns
+     them; given nothing it builds its own and drives itself, which is how the
+     single-file build ran and what keeps this file testable without React.
+
+     Everything downstream reads this.renderer / this.scene / this.camera and
+     does not care which of the two happened. */
+  constructor(host, ctx = null) {
     this.host = host;
-    this.renderer = new GLRenderer({ antialias: !IS_TOUCH, powerPreference: "high-performance" });
-    this.renderer.setPixelRatio(Math.min(devicePixelRatio, IS_TOUCH ? 1.5 : 2));
-    this.renderer.setSize(innerWidth, innerHeight);
+    this.embedded = !!ctx;
+    if (ctx) {
+      this.renderer = ctx.gl;
+      this.camera = ctx.camera;
+    } else {
+      this.renderer = new GLRenderer({ antialias: !IS_TOUCH, powerPreference: "high-performance" });
+      this.renderer.setPixelRatio(Math.min(devicePixelRatio, IS_TOUCH ? 1.5 : 2));
+      this.renderer.setSize(innerWidth, innerHeight);
+      host.appendChild(this.renderer.domElement);
+    }
+    /* the look is the world's, not the host's: a Canvas that set up its own
+       tone mapping would wash the whole island out */
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = SHADOW_SOFT;
     this.renderer.outputColorSpace = SRGB;
     this.renderer.toneMapping = TONE_ACES;
     this.renderer.toneMappingExposure = 1.22;
-    host.appendChild(this.renderer.domElement);
 
-    this.scene = new Scene3();
+    this.scene = ctx ? ctx.scene : new Scene3();
     this.sky = this.skyTexture();
     this.scene.background = this.sky;
     this.outdoorOnly = [];      // things that must vanish underground
     this.scene.fog = new Fog3(0x2a3c58, 90, 430);
 
-    this.camera = new PerspCam(60, innerWidth / innerHeight, .1, 2400);
+    if (!ctx) this.camera = new PerspCam(60, innerWidth / innerHeight, .1, 2400);
+    else { this.camera.fov = 60; this.camera.near = .1; this.camera.far = 2400;
+           this.camera.updateProjectionMatrix(); }
     this.camGoal = new V3(); this.camLook = new V3();
     this.camYaw = 0; this.fovGoal = 60;
 
@@ -7221,8 +7239,11 @@ class Game {
     }
   }
 
+  /* One frame of world. Kept separate from loop() so react-three-fiber can
+     call it from its own useFrame and still own the schedule — a world that
+     insists on requestAnimationFrame cannot be embedded in anything. */
   loop() {
-    requestAnimationFrame(this.loop);
+    if (!this.embedded) requestAnimationFrame(this.loop);
     const dt = Math.min(this.clock.getDelta(), .05);
     const t = this.clock.elapsedTime;
     this.control(dt);
@@ -7535,6 +7556,12 @@ class Game {
     }
 
     $("#speedV").textContent = Math.round(spd * 3);
+    /* When embedded, the host decides when pixels happen; it calls
+       renderFrame() after this returns. */
+    if (!this.embedded) this.renderFrame();
+  }
+
+  renderFrame() {
     this.composer.render();
   }
 }
@@ -7566,7 +7593,9 @@ addEventListener("keydown", () => {
    measureText. Measuring before JetBrains Mono has loaded gives fallback
    metrics while the canvas ends up rasterised with the real font, which clips
    the longer temple names — so wait for the font (but never hang on it). */
-async function boot() {
+/* `ctx` is react-three-fiber's { gl, scene, camera } when the world is being
+   mounted inside a <Canvas>, and null when it stands alone. */
+export async function boot(ctx = null) {
   try {
     await Promise.race([
       document.fonts ? document.fonts.ready : Promise.resolve(),
@@ -7574,8 +7603,12 @@ async function boot() {
     ]);
   } catch { }
   try {
-    game = new Game($("#scene"));
-    requestAnimationFrame(game.loop);
+    game = new Game($("#scene"), ctx);
+    /* Only self-drive when nobody else is going to. Under a Canvas the host
+       calls game.loop() and game.renderFrame() from its own frame callback,
+       and a second requestAnimationFrame here would step the physics twice
+       per displayed frame. */
+    if (!ctx) requestAnimationFrame(game.loop);
     $("#introRing").style.display = "none";
     $("#startBtn").classList.add("show");
     window.__game = game;
@@ -7588,6 +7621,7 @@ async function boot() {
       near: state.near ? L(state.near.meta.name) : null,
       fish: state.fish, zones: state.zonesFound
     });
+    return game;
   } catch (err) {
     console.error(err);
     $("#introRing").style.display = "none";
@@ -7596,7 +7630,9 @@ async function boot() {
     el.textContent = TXT().err;
   }
 }
-boot();
+
+/* No self-boot on import any more: whoever imports this decides when, and
+   under react-three-fiber that is after the Canvas exists. */
 setTimeout(() => {
   if (!game) {
     const el = $("#introErr");

@@ -223,3 +223,7 @@
 
   @media(max-width:640px){ #info .tl{grid-template-columns:1fr;gap:6px} #legend{font-size:10px;gap:10px} .brand .role{display:none}
     #mm .slot{width:28px;height:28px} #mm .pick{width:40px;height:40px} }
+
+/* react-three-fiber's canvas takes the place the world's own used to fill.
+   #scene in the shell keeps its z-order and the HUD still sits above it. */
+.r3f-host { position: fixed; inset: 0; z-index: 0; }
