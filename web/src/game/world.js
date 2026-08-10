@@ -2499,6 +2499,7 @@ class Game {
     registerFallback("coaster-car", i => this.coasterCarModel(i));
     registerFallback("ferris-wheel", () => this.ferrisWheelModel());
     registerFallback("carousel", () => this.carouselModel());
+    registerFallback("cat", () => this.catModel());
 
     this.buildTerrain();
     this.buildPlaza();
@@ -6890,9 +6891,26 @@ class Game {
 
     const G = new Grp(); this.scene.add(G);
     this.catGrp = G;
-    const inner = new Grp(); G.add(inner);       // for squash & sit pose
+    /* Through the registry like everything else. What comes back is wrapped
+       in catGrp, which carries the cat's world position and heading — the
+       model itself knows nothing about either. */
+    const inner = getModel("cat");
+    G.add(inner);
     this.catInner = inner;
+    this.resolveCatParts(inner);
+    this.finishCat();
 
+    G.position.copy(body.position);
+  }
+
+  /* ---- the cat, at the origin ----
+     Everything the loop animates carries a name: inner, head, earL, earR,
+     eyeL, eyeR, legFL/FR/BL/BR and tail0..4. The loop used to hold direct
+     references handed to it by this function, which meant only this function
+     could ever supply a cat. Names mean a .glb can. */
+  catModel() {
+    const inner = new Grp();
+    inner.name = "inner";
     /* The coat is a painted texture rather than flat colour plus three boxes
        glued to the back: a mackerel tabby wants stripes that wrap around the
        barrel and fade into a cream belly, which is a two-minute canvas and no
@@ -6920,7 +6938,7 @@ class Game {
 
     /* head */
     const head = new Grp(); head.position.set(0, .62, .78); inner.add(head);
-    this.catHead = head;
+    head.name = "head";
     const skull = this.m(new SphGeo(.44, 20, 15), furHead, 0, 0, 0, { parent: head });
     skull.scale.set(1, .92, .95);
     /* cheeks: fur-coloured mass at the jaw, which is what widens a cat's face.
@@ -6941,11 +6959,11 @@ class Game {
       const ear = this.m(new ConeGeo(.2, .44, 5), furHead, sx * .26, .48, -.02, { parent: head });
       ear.rotation.z = -sx * .3; ear.rotation.y = sx * .4;
       this.m(new ConeGeo(.11, .26, 5), pinkM, 0, .02, .035, { parent: ear, cast: false });
-      if (sx < 0) this.earL = ear; else this.earR = ear;
+      ear.name = sx < 0 ? "earL" : "earR";
     }
     /* eyes: green iris, slit pupil, and a catchlight — the highlight is what
        makes them read as eyes instead of beads at any distance */
-    this.eyes = [];
+    const eyes = [];
     for (const sx of [-1, 1]) {
       const eye = this.m(new SphGeo(.11, 12, 9), new StdMat({ color: 0x63cf96, emissive: new Col(0x2f7d55), emissiveIntensity: .35, roughness: .18 }), sx * .19, .06, .35, { parent: head, cast: false });
       eye.scale.set(1, 1.05, .8);
@@ -6955,7 +6973,8 @@ class Game {
       const pupil = this.m(new SphGeo(.075, 10, 8), this.bmat(0x14161c), 0, 0, .078, { parent: eye, cast: false });
       pupil.scale.set(.4, 1.2, .8);
       this.m(new SphGeo(.024, 6, 5), this.bmat(0xffffff), -sx * .045, .052, .105, { parent: eye, cast: false });
-      this.eyes.push(eye);
+      eye.name = sx < 0 ? "eyeL" : "eyeR";
+      eyes.push(eye);
     }
     this.blinkT = 0;
     /* whiskers */
@@ -6970,7 +6989,7 @@ class Game {
     this.m(new SphGeo(.085, 10, 8), new StdMat({ color: 0xffd76a, metalness: .8, roughness: .25, emissive: new Col(0x806018), emissiveIntensity: .4 }), 0, .19, .95, { parent: inner, cast: false });
 
     /* legs: a tapered upper, a narrower ankle and a paw with toes */
-    this.legs = [];
+    const LEG_NAMES = ["legFL", "legFR", "legBL", "legBR"];
     [[-.32, .5], [.32, .5], [-.32, -.48], [.32, -.48]].forEach(([lx, lz], i) => {
       const pivot = new Grp(); pivot.position.set(lx, -.28, lz); inner.add(pivot);
       this.m(new CylGeo(.145, .105, .3, 9), fur, 0, -.13, 0, { parent: pivot });
@@ -6979,11 +6998,10 @@ class Game {
       paw.scale.set(1, .8, 1.15);
       for (let k = 0; k < 3; k++)
         this.m(new SphGeo(.05, 6, 5), cream, (k - 1) * .075, -.52, .15, { parent: pivot, cast: false });
-      this.legs.push(pivot);
+      pivot.name = LEG_NAMES[i];
     });
 
     /* tail: a tapering chain, ringed like the coat */
-    this.tailSegs = [];
     let parent = inner;
     for (let i = 0; i < 5; i++) {
       const seg = new Grp();
@@ -6991,12 +7009,32 @@ class Game {
       const r = .115 - i * .012;
       this.m(new CylGeo(r, r * .9, .2, 8), i % 2 ? darkOr : orange, 0, 0, -.1, { parent: seg, cast: false, rx: Math.PI / 2 });
       this.m(new SphGeo(r * .95, 8, 6), i === 4 ? cream : (i % 2 ? darkOr : orange), 0, 0, -.2, { parent: seg, cast: false });
+      seg.name = "tail" + i;
       parent.add(seg);
-      this.tailSegs.push(seg);
       parent = seg;
     }
+    return inner;
+  }
 
-    G.position.copy(body.position);
+  /* Look the animated parts up once, tolerating a model that does not have
+     them. A replacement cat with no tail loses its tail wag; it does not take
+     the game down on the first frame of the render loop. */
+  resolveCatParts(inner) {
+    const find = n => inner.getObjectByName(n) || null;
+    this.catHead = find("head");
+    this.earL = find("earL"); this.earR = find("earR");
+    this.eyes = ["eyeL", "eyeR"].map(find).filter(Boolean);
+    const legs = ["legFL", "legFR", "legBL", "legBR"].map(find);
+    this.legs = legs.every(Boolean) ? legs : null;
+    this.tailSegs = [];
+    for (let i = 0; i < 8; i++) { const t = find("tail" + i); if (t) this.tailSegs.push(t); }
+  }
+
+  /* the shadow, the dust pool and the cat's place in the world — none of it
+     part of the model, all of it needed before the first frame */
+  finishCat() {
+    const body = this.catBody;
+    this.catGrp.position.copy(body.position);
 
     /* soft blob shadow */
     const blob = new Mesh(new PlaneGeo(2.6, 2.6),
@@ -7262,10 +7300,16 @@ class Game {
       seg.rotation.x = (i === 0 ? -.7 : 0) + Math.sin(t * 2.4 + i * .8) * .18 + this.sitF * .25;
       seg.rotation.y = Math.sin(t * 3 + i * .9 + this.speedSmooth) * (.25 + this.sitF * .2);
     }
-    /* head idle motion + ear twitch */
-    this.catHead.rotation.z = Math.sin(t * 2) * .05;
-    this.catHead.rotation.x = Math.sin(t * 1.4) * .04 + this.sitF * .45;
-    if (Math.sin(t * .7) > .995) this.earL.rotation.z = -.5 + Math.random() * .3;
+    /* Head idle motion + ear twitch, each guarded. A cat that came out of the
+       folder without a named head still walks, sits, jumps and is controlled
+       normally — it just holds its head still. Losing an idle animation is a
+       reasonable thing for a swapped model to cost you; a null on the first
+       frame of the render loop is not. */
+    if (this.catHead) {
+      this.catHead.rotation.z = Math.sin(t * 2) * .05;
+      this.catHead.rotation.x = Math.sin(t * 1.4) * .04 + this.sitF * .45;
+    }
+    if (this.earL && Math.sin(t * .7) > .995) this.earL.rotation.z = -.5 + Math.random() * .3;
     /* blink */
     this.blinkT += dt;
     let blink = 1;
