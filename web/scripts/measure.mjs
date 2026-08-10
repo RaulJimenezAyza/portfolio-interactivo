@@ -36,5 +36,16 @@ console.log(JSON.stringify({
   size: [r(hi[0] - lo[0]), r(hi[1] - lo[1]), r(hi[2] - lo[2])],
   minY: r(lo[1]),
   centreXZ: [r((lo[0] + hi[0]) / 2), r((lo[2] + hi[2]) / 2)],
-  nodes: (gltf.nodes ?? []).map(n => n.name).filter(Boolean).slice(0, 4)
+  nodes: (gltf.nodes ?? []).map(n => n.name).filter(Boolean).slice(0, 4),
+  /* Per primitive, because a union box cannot tell you which way a thing
+     faces. A rail tile is a metre square in plan whichever axis its bar runs
+     along; the giveaway is the individual pieces inside it, and a wall built
+     on a coin-flip about that goes in lying on its side. */
+  parts: (gltf.meshes ?? []).flatMap(m => m.primitives.map(pr => {
+    const a = gltf.accessors[pr.attributes.POSITION];
+    return a?.min ? {
+      size: [r(a.max[0] - a.min[0]), r(a.max[1] - a.min[1]), r(a.max[2] - a.min[2])],
+      at: [r((a.min[0] + a.max[0]) / 2), r((a.min[1] + a.max[1]) / 2), r((a.min[2] + a.max[2]) / 2)]
+    } : null;
+  })).filter(Boolean).slice(0, 8)
 }));

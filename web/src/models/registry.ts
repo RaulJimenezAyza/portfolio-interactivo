@@ -126,6 +126,26 @@ export const MODELS: Record<string, ModelSpec> = {
     note: "Lead car of the train, nose toward +Z. Origin on the axle line, 1.5m long before scale.",
     fallback: () => new THREE.Group()
   },
+  "coaster-track": {
+    file: "coaster-track.glb", scale: 1, collider: "none",
+    note: "Four metres of rail, origin at one end running toward +Z. Laid repeatedly along the circuit and oriented by the track frame.",
+    fallback: () => new THREE.Group()
+  },
+  "coaster-support": {
+    file: "coaster-support.glb", scale: 1, collider: "none",
+    note: "One metre of column, origin at its foot. Stacked from the ground to the rail.",
+    fallback: () => new THREE.Group()
+  },
+  "park-queue": {
+    file: "park-queue.glb", scale: 1, collider: "none",
+    note: "One metre of queue railing, running along X. Origin on the ground.",
+    fallback: () => new THREE.Group()
+  },
+  "park-path": {
+    file: "park-path.glb", scale: 1, collider: "none",
+    note: "One metre of paving, flat, origin on the ground.",
+    fallback: () => new THREE.Group()
+  },
   "park-gate": {
     file: "park-gate.glb", scale: 2.3, collider: "none",
     note: "Arch at the end of the boardwalk. Origin on the deck, facing +Z, 2.43m tall before scale.",
