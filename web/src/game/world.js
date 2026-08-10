@@ -1949,7 +1949,14 @@ const atP = r => ({ x: PU.x * r, z: PU.z * r });
 const PARK_R = 50, PARK_Y = 3;
 const PARK = atP(158);
 const PARK_A = atP(coastRadius(PARK_BRG) - 5);
-const PARK_B = atP(158 - PARK_R + 8);
+/* The deck has to finish ON the island, not short of it. parkEdge's near
+   side is PARK_R * (.78 + noise), so the walkable edge sits somewhere between
+   114 and 121 out; ending the span at the nominal radius left a three-metre
+   strip where neither the deck clamp nor the island clamp would take you, and
+   you stopped dead on it. Four metres of overlap past the worst case covers
+   the noise. Same failure as the first bridge's abutment, on the other
+   bridge. */
+const PARK_B = atP(158 - PARK_R * .78 + 4);
 const PARK_HALF = 3;
 const PARK_ROAD = { x1: 0, z1: 0, x2: PARK_A.x, z2: PARK_A.z };
 PATH_LINES.push(PARK_ROAD);
@@ -1963,7 +1970,12 @@ const PARK_Y0 = islandHeight(PARK_A.x, PARK_A.z) + .35;
    need it and leaves the landing exactly where it was. `back` is 1 on the far
    side and 0 on the shore facing home. */
 const parkEdge = a => {
-  const back = (1 - Math.cos(a - PARK_BRG)) / 2;
+  /* `a` runs from the island's centre outward, so the direction that points
+     away from home is PARK_BRG itself and the one facing home is PARK_BRG+pi.
+     This had the sign the other way, which grew the island toward the main
+     island instead of away from it: the near shore advanced eleven metres
+     over the boardwalk and buried the end of it in the hillside. */
+  const back = (1 + Math.cos(a - PARK_BRG)) / 2;
   return PARK_R * (.78 + .3 * back + .12 * fbm(Math.cos(a) * 2.4 - 7, Math.sin(a) * 2.4 + 5, 2));
 };
 
@@ -4299,14 +4311,18 @@ class Game {
      from the main island, side is to the left of that. */
   parkPlan() {
     return {
-      midway:   { fwd: 20, side: 0, r: 13 },
-      wheel:    { fwd: 2, side: 21, r: 15 },
-      carousel: { fwd: 4, side: -23, r: 8 },
+      /* Spread out. Everything used to sit in a band between fwd 15 and 28
+         with the rides either side of it, so the whole fair read as one
+         crowded strip and three quarters of the island was empty grass. The
+         lobe is on the far side now, so there is room out there to use. */
+      midway:   { fwd: 14, side: 0, r: 11 },
+      wheel:    { fwd: 40, side: 16, r: 15 },
+      carousel: { fwd: 34, side: -20, r: 8 },
       kiosks: [
-        { key: "stall-food", fwd: 15, side: -9 },
-        { key: "stall-drinks", fwd: 19.5, side: 10.5 },
-        { key: "stall-information", fwd: 24, side: -12 },
-        { key: "stall-toilets", fwd: 28.5, side: 13.5 }
+        { key: "stall-food", fwd: 12, side: -13 },
+        { key: "stall-drinks", fwd: 16, side: 13 },
+        { key: "stall-information", fwd: 26, side: -6 },
+        { key: "stall-toilets", fwd: 46, side: -4 }
       ]
     };
   }
@@ -4340,18 +4356,50 @@ class Game {
       this.kiosk(k.key, p.x, p.z, Math.atan2(PARK.x - p.x, PARK.z - p.z));
     }
 
+    /* Paved ways from the midway out to each ride, tile by tile. One metre
+       each, so the count is the distance — and laid flat, which is the one
+       orientation a square paving tile cannot get wrong. */
+    for (const target of [plan.wheel, plan.carousel, plan.kiosks[3]]) {
+      const a = at(target.fwd, target.side), b = mid;
+      const n = Math.round(Math.hypot(a.x - b.x, a.z - b.z));
+      const ry = Math.atan2(a.x - b.x, a.z - b.z);
+      for (let i = 2; i < n - 2; i++) {
+        const t = i / n;
+        for (const off of [-.5, .5]) {
+          const px = b.x + (a.x - b.x) * t - Math.cos(ry) * off;
+          const pz = b.z + (a.z - b.z) * t + Math.sin(ry) * off;
+          this.parkProp("park-path", px, pz, ry);
+        }
+      }
+    }
+
+    /* a queue line snaking up to the station, which is what tells you the
+       coaster is a thing you get on rather than a thing you look at */
+    {
+      const st = coasterFrame(0);
+      const dir = Math.atan2(st.p.x - mid.x, st.p.z - mid.z);
+      for (let i = 0; i < 16; i++) {
+        const t = i / 16;
+        const wob = Math.sin(i * .9) * 2.2;
+        const px = mid.x + (st.p.x - mid.x) * t - Math.cos(dir) * wob;
+        const pz = mid.z + (st.p.z - mid.z) * t + Math.sin(dir) * wob;
+        this.parkProp("park-queue", px, pz, dir + Math.PI / 2);
+      }
+    }
+
     /* and the small stuff that makes a midway feel walked on rather than
        laid out: benches facing the rides, bins beside them, flower beds in
        the gaps */
-    for (let i = 0; i < 6; i++) {
-      const a = i / 6 * Math.PI * 2 + .4;
-      const b = { x: mid.x + Math.cos(a) * 9.5, z: mid.z + Math.sin(a) * 9.5 };
+    for (let i = 0; i < 10; i++) {
+      const a = i / 10 * Math.PI * 2 + .4;
+      const rad = 9.5 + (i % 3) * 8;
+      const b = { x: mid.x + Math.cos(a) * rad, z: mid.z + Math.sin(a) * rad };
       const face = Math.atan2(mid.x - b.x, mid.z - b.z);
       this.parkProp("park-bench", b.x, b.z, face);
       if (i % 2 === 0) this.parkProp("park-bin", b.x + Math.cos(a + .3) * 1.6, b.z + Math.sin(a + .3) * 1.6, 0);
     }
-    for (let i = 0; i < 10; i++) {
-      const a = i / 10 * Math.PI * 2 + .9, r = 11 + (i % 3) * 1.8;
+    for (let i = 0; i < 22; i++) {
+      const a = i / 22 * Math.PI * 2 + .9, r = 10 + (i % 5) * 6.5;
       this.parkProp("park-flowers", mid.x + Math.cos(a) * r, mid.z + Math.sin(a) * r, a);
     }
     /* lamps down the midway */
