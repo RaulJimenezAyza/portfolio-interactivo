@@ -5,6 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
 <title>Raúl Jiménez Ayza · La Isla del Gato — portfolio jugable 3D</title>
 <meta name="description" content="La Isla del Gato: el portfolio jugable de Raúl Jiménez Ayza. Explora una isla con 8 templos, físicas reales y un gato protagonista. Gameplay & fullstack engineer." />
+<!-- Favicon: the cat, inlined as an SVG data URI so the page stays a single file. -->
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2NCA2NCI+PHJlY3Qgd2lkdGg9IjY0IiBoZWlnaHQ9IjY0IiByeD0iMTQiIGZpbGw9IiMwYTBhMGMiLz48cGF0aCBkPSJNMTMgMjdWOWwxMyA5YTIxIDIxIDAgMCAxIDEyIDBsMTMtOXYxOGExOSAxOSAwIDEgMS0zOCAweiIgZmlsbD0iI2ZmZDc2YSIvPjxjaXJjbGUgY3g9IjI0IiBjeT0iMzMiIHI9IjMuNCIgZmlsbD0iIzBhMGEwYyIvPjxjaXJjbGUgY3g9IjQwIiBjeT0iMzMiIHI9IjMuNCIgZmlsbD0iIzBhMGEwYyIvPjxwYXRoIGQ9Ik0zMiA0M2wtMy40LTMuNmg2Ljh6IiBmaWxsPSIjMGEwYTBjIi8+PHBhdGggZD0iTTMyIDQzdjRNMzIgNDdjMCAyLjQgMyAyLjQgMyAwTTMyIDQ3YzAgMi40LTMgMi40LTMgMCIgc3Ryb2tlPSIjMGEwYTBjIiBzdHJva2Utd2lkdGg9IjEuNiIgZmlsbD0ibm9uZSIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIi8+PC9zdmc+" />
+<meta name="theme-color" content="#0a0a0c" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet" />
 <style>
@@ -5867,18 +5870,29 @@ function heightAt(x, z) {
    One radial clamp against the coastline is no longer enough now that
    there is somewhere to walk to past it. */
 function confineOutdoors(p) {
-  const t = bridgeT(p.x, p.z);
-  const side = bridgeSide(p.x, p.z, t);
-  const dIsl = Math.hypot(p.x - ISLET.x, p.z - ISLET.z);
-  if (side <= BRIDGE_HALF + 1.6 && dIsl > 20) {
-    if (side > BRIDGE_HALF) {                    // slide back onto the planks
-      const px = BRIDGE_A.x + (BRIDGE_B.x - BRIDGE_A.x) * t;
-      const pz = BRIDGE_A.z + (BRIDGE_B.z - BRIDGE_A.z) * t;
-      const k = BRIDGE_HALF / side;
-      p.x = px + (p.x - px) * k; p.z = pz + (p.z - pz) * k;
+  /* Unclamped t on purpose. bridgeT() clamps to [0,1], which makes "distance
+     to the span" collapse into "distance to the abutment" the moment you step
+     past either end — and then the rail clamp below is no longer a corridor,
+     it is a sphere of radius BRIDGE_HALF around the bridgehead. Walking home
+     off the deck you got snapped back onto that sphere every frame and could
+     never reach the side > BRIDGE_HALF + 1.6 that releases the branch: stuck
+     on the spot, one step short of the beach. Past an abutment you are on
+     land, so the span clamp has to let go and the island/islet clamps take
+     over instead. */
+  const bdx = BRIDGE_B.x - BRIDGE_A.x, bdz = BRIDGE_B.z - BRIDGE_A.z;
+  const tRaw = ((p.x - BRIDGE_A.x) * bdx + (p.z - BRIDGE_A.z) * bdz) / (bdx * bdx + bdz * bdz);
+  if (tRaw > 0 && tRaw < 1) {
+    const px = BRIDGE_A.x + bdx * tRaw, pz = BRIDGE_A.z + bdz * tRaw;
+    const side = Math.hypot(p.x - px, p.z - pz);
+    if (side <= BRIDGE_HALF + 1.6) {
+      if (side > BRIDGE_HALF) {                  // slide back onto the planks
+        const k = BRIDGE_HALF / side;
+        p.x = px + (p.x - px) * k; p.z = pz + (p.z - pz) * k;
+      }
+      return;
     }
-    return;
   }
+  const dIsl = Math.hypot(p.x - ISLET.x, p.z - ISLET.z);
   if (dIsl < ISLET_R * 1.2 + 4) {
     const edge = isletEdge(Math.atan2(p.z - ISLET.z, p.x - ISLET.x)) - 1.5;
     if (dIsl > edge) {
