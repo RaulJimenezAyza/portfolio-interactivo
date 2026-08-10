@@ -7,7 +7,7 @@
     "predev": "npm run models",
     "prebuild": "npm run models",
     "dev": "next dev",
-    "build": "next build",
+    "build": "node scripts/build.mjs",
     "start": "next start",
     "lint": "next lint",
     "verify": "tsx scripts/verify.ts"
