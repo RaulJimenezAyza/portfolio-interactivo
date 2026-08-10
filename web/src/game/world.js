@@ -2497,6 +2497,8 @@ class Game {
     registerFallback("crate", () => this.crateModel());
     registerFallback("stele", () => this.steleModel());
     registerFallback("coaster-car", i => this.coasterCarModel(i));
+    registerFallback("ferris-wheel", () => this.ferrisWheelModel());
+    registerFallback("carousel", () => this.carouselModel());
 
     this.buildTerrain();
     this.buildPlaza();
@@ -4267,10 +4269,13 @@ class Game {
      TorusGeometry gives you for free. The gondolas hang off the rim and are
      counter-rotated every frame: parented to a turning wheel they would ride
      round upside down at the top, which is a fairground ride nobody survives. */
-  ferrisWheel(x, z, ry) {
+  /* Built at the origin standing on y=0. The two parts that move carry
+     names — `spin` for the wheel and `cab0..n` for the gondolas — because a
+     replacement model has to offer the same handles for the scene to turn it
+     and to keep its seats level. The folder's README lists them. */
+  ferrisWheelModel() {
     const R = 14, W = 2.6, N = 12;
-    const G = new Grp(); G.position.set(x, PARK_Y, z); G.rotation.y = ry;
-    this.scene.add(G); this.outdoorOnly.push(G);
+    const G = new Grp();
     const steel = this.mat(0xb8bcc8, { roughness: .5, metalness: .35, flatShading: true });
     const paint = this.mat(0xd6543c, { roughness: .7, flatShading: true });
 
@@ -4299,10 +4304,25 @@ class Game {
         0, -1.65, 0, { parent: cab, recv: true });
       this.m(new ConeGeo(1.5, .6, 6), this.mat(0xf2efe7, { roughness: .8, flatShading: true }),
         0, -.95, 0, { parent: cab, cast: false });
+      cab.name = "cab" + i;
       cabs.push(cab);
     }
+    spin.name = "spin";
+    return G;
+  }
+
+  ferrisWheel(x, z, ry) {
+    const G = getModel("ferris-wheel");
+    G.position.set(x, PARK_Y, z); G.rotation.y = ry;
+    this.scene.add(G); this.outdoorOnly.push(G);
     this.scyl(3, 6, x, PARK_Y + 3, z);
-    this.addOccluder(x, PARK_Y + R, z, R * .5);
+    this.addOccluder(x, PARK_Y + 14, z, 7);
+    /* Found by name rather than closed over, so this works the same whether
+       the wheel came from the folder or from the builder above. A model with
+       no `spin` simply stands still instead of throwing. */
+    const spin = G.getObjectByName("spin");
+    if (!spin) return;
+    const cabs = spin.children.filter(c => c.name.startsWith("cab"));
     this.anims.push(t => {
       spin.rotation.x = t * .18;
       for (const c of cabs) c.rotation.x = -spin.rotation.x;    // stay level
@@ -4310,9 +4330,8 @@ class Game {
   }
 
   /* ---- carousel ---- */
-  carousel(x, z) {
-    const G = new Grp(); G.position.set(x, PARK_Y, z); this.scene.add(G);
-    this.outdoorOnly.push(G);
+  carouselModel() {
+    const G = new Grp();
     const wood = this.mat(0x8a6a48, { roughness: .9, flatShading: true });
     const gold = this.mat(0xc9a24a, { roughness: .35, metalness: .6 });
     const stripes = this.makeCanvas(256, 64, g => {
@@ -4341,9 +4360,21 @@ class Game {
         this.m(new ConeGeo(.13, .26, 4), this.mat(0xe0b090, { roughness: .9 }), s * .16, 2.24, .48, { parent: m });
       mounts.push(m);
     }
+    spin.name = "spin";
+    mounts.forEach((m, i) => { m.name = "mount" + i; });
+    return G;
+  }
+
+  carousel(x, z) {
+    const G = getModel("carousel");
+    G.position.set(x, PARK_Y, z); this.scene.add(G);
+    this.outdoorOnly.push(G);
     this.scyl(7.8, 4, x, PARK_Y + 2, z);
     this.addOccluder(x, PARK_Y + 4, z, 5);
     this.addLight(x, PARK_Y + 5, z, 0xffc48a, 8, 24);
+    const spin = G.getObjectByName("spin");
+    if (!spin) return;
+    const mounts = spin.children.filter(c => c.name.startsWith("mount"));
     this.anims.push(t => {
       spin.rotation.y = t * .5;
       mounts.forEach((m, i) => { m.position.y = Math.sin(t * 2 + i * .8) * .45; });
