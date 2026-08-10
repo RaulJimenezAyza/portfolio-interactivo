@@ -6412,6 +6412,30 @@ class Game {
     return mat;
   }
 
+  /* ---- ground-lit ----
+     Shade this material as if every fragment of it were the ground, whichever
+     way its geometry actually faces.
+
+     Grass is the reason. The blades already carry a straight-up normal so a
+     vertical sliver is not lit edge-on and black — but they are double-sided,
+     and three flips the normal on back faces. Up becomes down, the light comes
+     from below, and every blade you happen to be looking at from behind
+     renders black. Half a field of grass, at random, as black slivers.
+
+     Forcing it in the fragment shader fixes both sides at once, and it is
+     world up transformed into view space because that is the space `normal`
+     lives in by the time normal_fragment_begin has run. */
+  groundLit(mat) {
+    const prevHook = mat.onBeforeCompile, prevKey = mat.customProgramCacheKey;
+    mat.onBeforeCompile = sh => {
+      if (prevHook) prevHook.call(mat, sh);
+      sh.fragmentShader = sh.fragmentShader.replace("#include <normal_fragment_begin>",
+        "#include <normal_fragment_begin>\n  normal = normalize(mat3(viewMatrix) * vec3(0.0, 1.0, 0.0));");
+    };
+    mat.customProgramCacheKey = () => (prevKey ? prevKey.call(mat) : "") + "|groundlit";
+    return mat;
+  }
+
   /* One material per foliage colour instead of one per tree. Forty-six trees
      used to mean about a hundred and eighty standard materials, all of them
      identical in every way that matters — and wind needs them shared anyway,
@@ -6905,39 +6929,105 @@ class Game {
      carry pre-mixed atmospheric colours instead, which keeps the far distance
      reading as depth rather than as an empty backdrop behind the sea. */
   buildHorizon() {
+    /* Three ranges, each one merged buffer.
+
+       They used to be forty-odd separate cones painted a single flat colour
+       per ring, spaced far enough apart that you could see sky between them:
+       a row of blue triangles standing on the sea rather than a range. Now
+       each range is a continuous ridgeline of pyramids sharing one geometry,
+       and the colour is per vertex — dark at the summits, fading toward the
+       haze colour at the feet. That vertical fade is the whole illusion of
+       distance; a flat fill has no distance in it at all, however far away you
+       put the mesh.
+
+       Still no fog on them. Fog is linear in distance and these sit at ten
+       times the range it is tuned for, so it would swallow them whole; the
+       aerial perspective is baked into the vertex colours instead. */
     const rings = [
-      { dist: 700, h: 96, w: 260, n: 9, col: 0x38445f, jitter: .5 },
-      { dist: 1050, h: 165, w: 400, n: 8, col: 0x44506c, jitter: .4 },
-      { dist: 1500, h: 250, w: 620, n: 7, col: 0x505c78, jitter: .3 }
+      { dist: 700, h: 96, w: 150, n: 26, ridge: 0x2c3752, haze: 0x5a627e, jitter: .5, snow: .80 },
+      { dist: 1050, h: 165, w: 230, n: 22, ridge: 0x3a4562, haze: 0x6b718f, jitter: .4, snow: .84 },
+      { dist: 1500, h: 250, w: 360, n: 18, ridge: 0x4d5875, haze: 0x7b809b, jitter: .3, snow: .88 }
     ];
+    const snowCol = new Col(0x9aa4bc);
     for (const r of rings) {
-      const mat = new BasicMat({ color: r.col, fog: false });
-      const snow = new BasicMat({ color: 0x8f9ab4, fog: false });
-      for (let i = 0; i < r.n; i++) {
-        const a = (i / r.n) * Math.PI * 2 + hash2(i, r.n) * .3;
-        const d = r.dist * (1 + (hash2(i, 7) - .5) * r.jitter * .3);
-        const hh = r.h * (.55 + hash2(i, 13) * .9);
-        const ww = r.w * (.6 + hash2(i, 29) * .8);
-        const g = new Grp();
-        g.position.set(Math.cos(a) * d, -8, Math.sin(a) * d);
-        g.lookAt(0, hh * .3, 0);
-        this.scene.add(g);
-        this.outdoorOnly.push(g);
-        /* two overlapping peaks per slot so the ridgeline is not a row of cones */
-        for (let k = 0; k < 2; k++) {
-          const s = k ? .68 : 1;
-          const peak = new Mesh(new ConeGeo(ww * .5 * s, hh * s, 4), mat);
-          peak.position.set((k ? 1 : -1) * ww * .22, hh * s * .5 - 8, k * 6);
-          peak.rotation.y = Math.PI / 4;
-          g.add(peak);
-          if (hh * s > r.h * .85) {
-            const cap = new Mesh(new ConeGeo(ww * .5 * s * .3, hh * s * .22, 4), snow);
-            cap.position.set(peak.position.x, hh * s * .89 - 8, peak.position.z);
-            cap.rotation.y = Math.PI / 4;
-            g.add(cap);
+      const ridge = new Col(r.ridge), haze = new Col(r.haze), c = new Col();
+      const verts = [], cols = [];
+      /* one pyramid: apex plus a square footing, four faces, no index buffer —
+         at this size a shared vertex would have to average two colours anyway */
+      const peak = (cx, cz, ww, hh, lean, capped) => {
+        const base = [[-ww, -ww], [ww, -ww], [ww, ww], [-ww, ww]];
+        for (let f = 0; f < 4; f++) {
+          const p0 = base[f], p1 = base[(f + 1) % 4];
+          const tri = [[cx + p0[0], -14, cz + p0[1]],
+                       [cx + p1[0], -14, cz + p1[1]],
+                       [cx + lean, hh - 14, cz]];
+          for (const v of tri) {
+            verts.push(v[0], v[1], v[2]);
+            const k = Math.max(0, v[1] + 14) / hh;
+            /* feet in haze, summits dark, and snow only on the summits that
+               earn it — capping every shoulder as well turned the skyline
+               into a row of white teeth */
+            c.copy(haze).lerp(ridge, Math.min(1, k * 1.35));
+            if (capped && k > r.snow) c.lerp(snowCol, Math.min(1, (k - r.snow) / (1 - r.snow) * 1.6));
+            cols.push(c.r, c.g, c.b);
           }
         }
+      };
+      for (let i = 0; i < r.n; i++) {
+        const a = (i / r.n) * Math.PI * 2 + (hash2(i, r.n) - .5) * (Math.PI / r.n);
+        const d = r.dist * (1 + (hash2(i, 7) - .5) * r.jitter * .2);
+        const hh = r.h * (.5 + hash2(i, 13) * 1.05);
+        const ww = r.w * (.55 + hash2(i, 29) * .85);
+        /* Local frame for this slot, laid out by hand rather than by lookAt:
+           everything goes into one buffer, so there is no per-peak object left
+           to hold a rotation. */
+        const ca = Math.cos(a), sa = Math.sin(a);
+        const px = ca * d, pz = sa * d;
+        /* two shoulders either side of the main summit, so consecutive slots
+           overlap into a ridge instead of standing apart as separate hills */
+        for (const [off, s] of [[-1.15, .62], [0, 1], [1.05, .7], [1.9, .45]]) {
+          const ox = px - sa * ww * off, oz = pz + ca * ww * off;
+          peak(ox, oz, ww * .62 * (s * .55 + .45), hh * s,
+            (hash2(i, off * 7 + 3) - .5) * ww * .3, hh * s > r.h * .92);
+        }
       }
+      const geo = new BufGeo();
+      geo.setAttribute("position", new F32Attr(new Float32Array(verts), 3));
+      geo.setAttribute("color", new F32Attr(new Float32Array(cols), 3));
+      const mesh = new Mesh(geo, new BasicMat({ vertexColors: true, fog: false, side: SIDE_DOUBLE }));
+      mesh.frustumCulled = false;             // the bounds wrap the whole world
+      /* Nearest range first. These three cover most of the sky band and
+         overlap heavily, and because their bounding spheres are all centred on
+         the world three cannot sort them front-to-back on its own — drawn in
+         the wrong order the far ranges shade every pixel the near one is about
+         to cover, which was most of the cost of the whole horizon. */
+      mesh.renderOrder = -10 + rings.indexOf(r);
+      this.scene.add(mesh);
+      this.outdoorOnly.push(mesh);
+    }
+
+    /* Two bands of haze standing in front of the far ranges. Mountains that
+       end in a hard line at the sea look like cardboard cut-outs propped up
+       behind it; a range wants to dissolve into its own distance. */
+    /* Kept low and thin. A first pass put these at eight tenths opacity and
+       ninety units tall, and since they are shells seen from the inside that
+       is a translucent wall wrapped round the whole world — the sky went flat
+       and the ranges behind them disappeared. Haze belongs in the last few
+       degrees above the sea, not across the upper half of the frame. */
+    const hazeTex = this.makeCanvas(4, 128, g => {
+      const grad = g.createLinearGradient(0, 128, 0, 0);
+      grad.addColorStop(0, "rgba(104,114,150,0.46)");
+      grad.addColorStop(.4, "rgba(100,110,146,0.17)");
+      grad.addColorStop(1, "rgba(96,106,142,0)");
+      g.fillStyle = grad; g.fillRect(0, 0, 4, 128);
+    });
+    for (const [d, h] of [[820, 52], [1240, 84]]) {
+      const band = this.m(new CylGeo(d, d, h, 48, 1, true),
+        new BasicMat({ map: hazeTex, transparent: true, depthWrite: false,
+                       side: SIDE_BACK, fog: false }),
+        0, h * .5 - 16, 0, { cast: false });
+      band.frustumCulled = false;
+      this.outdoorOnly.push(band);
     }
   }
 
@@ -7582,6 +7672,104 @@ class Game {
     ramp(-26, 2, .5);
   }
 
+  /* ---- clumps of grass ----
+     A painted card, three copies of it crossed at sixty degrees per clump, and
+     every clump on the island merged into one buffer. Three hundred separate
+     clumps would be nine hundred draw calls for ground cover, which is the
+     same trap buildGrass() already avoids for the small blades.
+
+     Merging costs you the per-object model matrix the wind normally phases
+     off, so the phase rides along as a vertex attribute instead — along with
+     a sway weight that is zero at the root and one at the tip, so the blades
+     bend rather than slide, which is what a rigid per-mesh offset could never
+     do anyway.
+
+     The card is bottom-anchored: a tuft grows out of the ground, and a centred
+     plane buries half of itself in the hill. */
+  buildGrassCards(spots) {
+    if (!spots.length) return;
+    this.grassCardMat();
+    const V = [], U = [], PH = [], SW = [];
+    for (const [x, y, z, s, yaw] of spots) {
+      for (let k = 0; k < 3; k++) {
+        const a = yaw + k * Math.PI / 3;
+        const dx = Math.cos(a) * .52 * s, dz = Math.sin(a) * .52 * s;
+        const h = .8 * s, ph = Math.random() * 6.283;
+        /* two triangles, wound so the alpha-tested card has no seam */
+        const quad = [[-1, 0], [1, 0], [1, 1], [-1, 0], [1, 1], [-1, 1]];
+        for (const [ux, uy] of quad) {
+          V.push(x + dx * ux, y + h * uy, z + dz * ux);
+          U.push((ux + 1) / 2, uy);
+          PH.push(ph);
+          SW.push(uy * uy);            // squared, so the bend is in the top half
+        }
+      }
+    }
+    const geo = new BufGeo();
+    geo.setAttribute("position", new F32Attr(new Float32Array(V), 3));
+    geo.setAttribute("uv", new F32Attr(new Float32Array(U), 2));
+    geo.setAttribute("aPh", new F32Attr(new Float32Array(PH), 1));
+    geo.setAttribute("aSway", new F32Attr(new Float32Array(SW), 1));
+    const nrm = new Float32Array(V.length);
+    for (let i = 1; i < nrm.length; i += 3) nrm[i] = 1;
+    geo.setAttribute("normal", new F32Attr(nrm, 3));
+    const mesh = new Mesh(geo, this.grassCards);
+    mesh.castShadow = false; mesh.receiveShadow = true;
+    this.scene.add(mesh);
+    this.outdoorOnly.push(mesh);
+  }
+
+  grassCardMat() {
+    if (this.grassCards) return this.grassCards;
+    /* Blades painted with a soft tip and a wide root so the alpha test cuts a
+       blade shape and not a rectangle with frayed corners. */
+    const tex = this.makeCanvas(128, 128, g => {
+      g.clearRect(0, 0, 128, 128);
+      const blade = (bx, lean, w, h, c0, c1) => {
+        const grad = g.createLinearGradient(0, 128, 0, 128 - h);
+        grad.addColorStop(0, c0); grad.addColorStop(1, c1);
+        g.fillStyle = grad;
+        g.beginPath();
+        g.moveTo(bx - w, 128);
+        g.quadraticCurveTo(bx - w * .35 + lean * .5, 128 - h * .6, bx + lean, 128 - h);
+        g.quadraticCurveTo(bx + w * .35 + lean * .5, 128 - h * .55, bx + w, 128);
+        g.closePath(); g.fill();
+      };
+      const seeds = [[22, -14, 7, 74], [40, -6, 8, 104], [58, 4, 9, 122],
+                     [76, 12, 8, 96], [94, 20, 7, 68], [110, 26, 6, 50]];
+      seeds.forEach(([bx, lean, w, h], i) => blade(bx, lean, w, h,
+        i % 2 ? "#20512c" : "#26602f", i % 3 ? "#5da95c" : "#7cc36a"));
+      /* a couple of dry stems, or a clump is one flat green */
+      blade(30, -20, 3, 112, "#4a5a2a", "#b9ab5e");
+      blade(88, 24, 3, 100, "#4a5a2a", "#a89a52");
+    });
+    /* Same lighting rule as the merged blade field: shaded as ground, not as
+       a vertical plate. Three cards at sixty degrees means one of them is
+       always near edge-on to a sun this low, and edge-on is black. */
+    const mat = this.groundLit(new StdMat({
+      map: tex, alphaTest: .45, side: SIDE_DOUBLE, roughness: .95
+    }));
+    /* Wind straight on the attributes, not through wind(): that helper phases
+       off the model matrix, and after the merge every clump shares one. */
+    if (!REDUCED) {
+      const prev = mat.onBeforeCompile, prevKey = mat.customProgramCacheKey;
+      mat.onBeforeCompile = sh => {
+        if (prev) prev.call(mat, sh);
+        sh.uniforms.uWind = this.windU;
+        sh.vertexShader = "uniform float uWind;\nattribute float aPh;\nattribute float aSway;\n" +
+          sh.vertexShader.replace("#include <begin_vertex>", `#include <begin_vertex>
+          {
+            float w = sin(uWind * 1.1 + aPh) + 0.45 * sin(uWind * 2.4 + aPh * 1.7);
+            transformed.x += w * aSway * 0.13;
+            transformed.z += w * aSway * 0.08;
+          }`);
+      };
+      mat.customProgramCacheKey = () => (prevKey ? prevKey.call(mat) : "") + "|grasswind";
+    }
+    this.grassCards = mat;
+    return mat;
+  }
+
   /* ============ nature: trees, rocks, flowers ============ */
   isClearOf(x, z, margin = 6) {
     const d = Math.hypot(x, z);
@@ -7673,16 +7861,22 @@ class Game {
       this.m(new SphGeo(.16, 7, 6), new StdMat({ color: petals[i % 4], emissive: new Col(petals[i % 4]), emissiveIntensity: .25, roughness: .6 }), 0, .6, 0, { parent: g, cast: false });
       this.anims.push(t => { g.rotation.z = Math.sin(t * 1.3 + x) * .08; });
     }
-    for (let i = 0; i < (IS_TOUCH ? 20 : 44); i++) {
-      const a = Math.random() * 6.28, r = 16 + Math.random() * 97;
+    /* ---- grass ----
+       These were four-sided flat-shaded cones. With the sun this low that
+       gives you exactly one lit face and three black ones, so every tuft read
+       as a little paper dart half-painted black, and the hillsides were
+       speckled with them. Crossed painted planes instead: alpha-tested rather
+       than transparent, so they sort like solid geometry and need no blending
+       order, and they look like grass from every angle because there is no
+       angle where you are staring at an unlit facet. */
+    const spots = [];
+    for (let i = 0; i < (IS_TOUCH ? 90 : 360); i++) {
+      const a = Math.random() * 6.28, r = 15 + Math.random() * 98;
       const x = Math.cos(a) * r, z = Math.sin(a) * r;
       if (!this.isClearOf(x, z, 0)) continue;
-      /* tufts sway harder than the trees: they are ankle-high, so a couple of
-         centimetres of offset is a lot of movement relative to their size */
-      this.m(new ConeGeo(.22, .7, 4), this.tuftMat ||
-        (this.tuftMat = this.wind(this.mat(0x2c6b40, { flatShading: true }), .045)),
-        x, heightAt(x, z) + .3, z, { cast: false });
+      spots.push([x, heightAt(x, z), z, .75 + Math.random() * .8, Math.random() * 6.283]);
     }
+    this.buildGrassCards(spots);
     /* butterflies */
     this.butterflies = [];
     for (let i = 0; i < (IS_TOUCH ? 3 : 6); i++) {
@@ -7914,11 +8108,18 @@ class Game {
     /* Every normal points straight up rather than out of the blade's own face.
        A vertical triangle lit by a low sun goes almost black, and a field of
        black slivers looks like a burnt lawn; borrowing the ground's normal
-       makes the grass sit in the same light as the hill it grows on. */
+       makes the grass sit in the same light as the hill it grows on.
+
+       The attribute alone was not enough, and that is why the hillsides were
+       speckled: these are double-sided, and three negates the normal on back
+       faces, so up became down and every blade seen from behind was lit from
+       underneath. groundLit() pins it in the shader, where the flip has
+       already happened. */
     const nrm = new Float32Array(v);
     for (let i = 1; i < v; i += 3) nrm[i] = 1;
     geo.setAttribute("normal", new F32Attr(nrm, 3));
-    const mesh = new Mesh(geo, new StdMat({ vertexColors: true, roughness: 1, side: SIDE_DOUBLE }));
+    const mesh = new Mesh(geo, this.groundLit(
+      new StdMat({ vertexColors: true, roughness: 1, side: SIDE_DOUBLE })));
     mesh.receiveShadow = true;
     this.scene.add(mesh);
     this.outdoorOnly.push(mesh);
@@ -8142,9 +8343,54 @@ class Game {
   registerZone(i, opts = {}) {
     const meta = ZONES_META[i], p = ZONE_POS[i];
     const col = new Col(meta.color).getHex();
+
+    /* ---- the precinct ----
+       Every temple used to be marked by one glowing circle painted on the
+       grass and nothing else, so however much architecture each of them had,
+       they all stood on a decal. A shared shell instead: a band of flagstones
+       edging the ground the temple occupies, a carved kerb outside it and a
+       ring of pylons carrying the zone's colour. Seven temples, one piece of
+       code — and because it is shared, they read as belonging to the same
+       island rather than as seven unrelated set pieces.
+
+       Flush with the ground, like the plaza and for the same reason: the cat
+       rides heightAt(), which is carved flat under every temple, so anything
+       with real height here is something it walks through. */
+    if (!this.precinctMats) this.precinctMats = {
+      pave: this.detail(this.mat(0x6f6555, { roughness: .9 }), 2.6, .17),
+      kerb: this.mat(0x554c40, { roughness: .95 }),
+      pylon: this.detail(this.mat(0x5b5346, { roughness: .92, flatShading: true }), 2.4, .2)
+    };
+    const PM = this.precinctMats;
+    this.m(new RingGeo(p.r - 2.6, p.r + .4, 56), PM.pave, p.x, .05, p.z,
+      { rx: -Math.PI / 2, cast: false, recv: true });
+    this.m(new RingGeo(p.r + .4, p.r + 1.1, 56), PM.kerb, p.x, .04, p.z,
+      { rx: -Math.PI / 2, cast: false, recv: true });
+
+    /* Pylons, skipped where the road comes in — a marker post planted in the
+       mouth of the only way to the door is the one place it must not go. */
+    const road = Math.atan2(p.x, p.z) + Math.PI;      // bearing the path arrives on
+    for (let k = 0; k < 8; k++) {
+      const a = k / 8 * Math.PI * 2;
+      let d = Math.abs(((a - road + Math.PI * 3) % (Math.PI * 2)) - Math.PI);
+      if (d < .5) continue;
+      const px = p.x + Math.sin(a) * (p.r - 1), pz = p.z + Math.cos(a) * (p.r - 1);
+      const G = new Grp(); G.position.set(px, 0, pz); G.rotation.y = a; this.scene.add(G);
+      /* Only the shaft casts. Seven precincts of eight pylons is a couple of
+         hundred casters, and the shadow map is re-rendered every frame — the
+         base ring and the collar contribute nothing you would ever notice. */
+      this.m(new CylGeo(.42, .52, .26, 6), PM.kerb, 0, .13, 0, { parent: G, recv: true, cast: false });
+      this.m(new CylGeo(.2, .32, 1.7, 6), PM.pylon, 0, 1.05, 0, { parent: G, recv: true });
+      this.m(new TorusGeo(.26, .05, 5, 12), PM.kerb, 0, 1.86, 0, { parent: G, rx: Math.PI / 2, cast: false });
+      this.m(new OctGeo(.2, 0), new StdMat({ color: col, emissive: new Col(col),
+        emissiveIntensity: 1.25, roughness: .25 }), 0, 2.14, 0, { parent: G, cast: false });
+      G.add(this.glowSprite(col, 1.15, new V3(0, 2.14, 0)));
+      this.scyl(.36, 2.2, px, 1.1, pz);
+    }
+
     const ring = this.m(new RingGeo(p.r - 1.2, p.r - .4, 48),
       this.bmat(col, { transparent: true, opacity: .4, side: SIDE_DOUBLE }),
-      p.x, .08, p.z, { rx: -Math.PI / 2, cast: false });
+      p.x, .09, p.z, { rx: -Math.PI / 2, cast: false });
     const light = this.addLight(p.x, opts.lightY ?? 7, p.z, col, 9, p.r * 3);
     const label = this.makeLabel(L(meta.name), meta.color, 2.5);
     label.position.set(p.x, opts.labelY ?? 10.5, p.z);
