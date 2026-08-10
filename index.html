@@ -4270,7 +4270,7 @@ const I18N = {
     zonesHud: "templos", fishHud: "peces",
     discover: "Templo descubierto:",
     allZones: "🏛 ¡Has descubierto los 7 templos! Ahora ya sabes con quién hablas.",
-    allFish: "🐟 ¡12/12! El gato ronronea. Logro desbloqueado: pescador de élite.",
+    allFish: "🐟 ¡12/12! El viejo del muelle enciende el farol: la barca es tuya. Ve a pescar junto al estanque.",
     fishGet: "pez dorado",
     flipBack: "¡Mortal hacia atrás!", flipFront: "¡Mortal hacia delante!",
     aboutTitle: "Sobre mí",
@@ -4299,7 +4299,7 @@ const I18N = {
     zonesHud: "temples", fishHud: "fish",
     discover: "Temple discovered:",
     allZones: "🏛 You found all 7 temples! Now you know who you're talking to.",
-    allFish: "🐟 12/12! The cat purrs. Achievement unlocked: elite fisher.",
+    allFish: "🐟 12/12! The old man lights the pier lantern: the boat is yours. Go fishing by the pond.",
     fishGet: "golden fish",
     flipBack: "Backflip!", flipFront: "Frontflip!",
     aboutTitle: "About",
@@ -4409,7 +4409,7 @@ const $  = s => document.querySelector(s);
 const $$ = s => Array.from(document.querySelectorAll(s));
 const state = { lang: "es", activeProject: null, near: null, infoSection: null,
                 fish: 0, fishTotal: 12, zonesFound: 0,
-                minigame: false, mmSolved: false, inCave: false };
+                minigame: false, mmSolved: false, inCave: false, riding: false };
 const L = v => (v && typeof v === "object" && !Array.isArray(v)) ? (v[state.lang] ?? v.es) : v;
 const TXT = () => I18N[state.lang];
 const IS_TOUCH = matchMedia("(pointer:coarse)").matches || "ontouchstart" in window;
@@ -4573,9 +4573,21 @@ function refreshPrompt() {
     $("#promptT").textContent = L(state.near.meta.name);
     const m = state.near.meta;
     $("#promptL").textContent = L(m.loreDone && state.mmSolved ? m.loreDone : m.lore);
+    /* The pier stays visible from the start but does not open until the last
+       golden fish is in: a locked door you can see is a reason to keep
+       looking, and a counter on it says exactly how much looking is left. */
+    if (m.kind === "fishing" && state.fish < state.fishTotal) {
+      $("#promptL").textContent = state.lang === "es"
+        ? `Cerrado. El viejo del muelle solo presta la barca a quien haya encontrado los doce peces dorados. Llevas ${state.fish} de ${state.fishTotal}.`
+        : `Closed. The old man at the pier only lends the boat to whoever has found all twelve golden fish. You have ${state.fish} of ${state.fishTotal}.`;
+    }
     $("#promptO").textContent = state.near.meta.key === "mastermind"
       ? TXT().promptO + (state.lang === "es" ? "  ·  G para jugar" : "  ·  G to play")
-      : TXT().promptO;
+      : m.kind === "fishing" && state.fish < state.fishTotal
+        ? (state.lang === "es" ? `faltan ${state.fishTotal - state.fish} peces` : `${state.fishTotal - state.fish} fish to go`)
+        : m.kind === "ride"
+          ? (state.lang === "es" ? "pulsa E para subir" : "press E to ride")
+          : TXT().promptO;
     el.querySelector(".k").textContent = TXT().promptK;
     el.style.borderColor = state.near.meta.color;
     el.classList.add("show");
@@ -4589,6 +4601,14 @@ function interact() {
   else if (m.kind === "section") renderInfoSection(m.section);
   else if (m.kind === "arcade") Arc.open(m.game);
   else if (m.kind === "mm") mmOpen();
+  else if (m.kind === "fishing") {
+    if (state.fish < state.fishTotal)
+      toast(state.lang === "es"
+        ? `El muelle está cerrado — ${state.fishTotal - state.fish} peces dorados por encontrar`
+        : `The pier is closed — ${state.fishTotal - state.fish} golden fish still out there`, 2400);
+    else Arc.open("fishing");
+  }
+  else if (m.kind === "ride" && game) game.boardCoaster();
 }
 
 /* ---------- input ---------- */
@@ -5496,7 +5516,218 @@ const GAME_RUNES = {
   }
 };
 
-const ARCADE_GAMES = [GAME_PONG, GAME_SNAKE, GAME_RUNES];
+/* ============================================================
+   4 · FISHING — the reward for finding all twelve golden fish
+
+   Side-on water. The hook drops on a line; steer the boat across the
+   top and the hook up and down, touch a fish to hook it, then reel it
+   back to the surface to bank it. Depth is worth money and costs time,
+   which is the entire game: the fat fish live at the bottom and the
+   clock does not care.
+
+   Boots and crabs snap the line and cost you whatever was on it, so
+   the deep run is a gamble rather than a grind.
+   ============================================================ */
+const SURFACE = 74;                              // waterline, in canvas pixels
+
+const GAME_FISHING = {
+  id: "fishing", color: "#7ce8e0",
+  kicker: { es: "Estanque de la isla · pesca", en: "Island pond · fishing" },
+  name: { es: "El Muelle de los Doce", en: "The Pier of Twelve" },
+  hint: { es: "Flechas o WASD: mueve la barca y baja el anzuelo. Toca un pez para engancharlo y súbelo a la superficie para cobrarlo. Los peces del fondo pagan más. Botas y cangrejos te parten el sedal. 60 segundos.",
+          en: "Arrows or WASD: steer the boat and drop the hook. Touch a fish to hook it, then reel it up to the surface to bank it. The deep ones pay more. Boots and crabs snap your line. 60 seconds." },
+
+  reset() {
+    this.boat = AW / 2;
+    this.hookY = SURFACE + 14;
+    this.score = 0;
+    this.time = 60;
+    this.hooked = null;
+    this.flash = 0;
+    this.msg = "";
+    this.msgT = 0;
+    this.things = [];
+    for (let i = 0; i < 18; i++) this.spawn(true);
+  },
+
+  /* Depth bands: the shallows hold small fry, the bottom holds the ones
+     worth going after, and junk is spread through the middle where it can
+     actually get in the way. */
+  spawn(initial) {
+    const band = Math.random();
+    const y = SURFACE + 26 + band * (AH - SURFACE - 54);
+    const deep = (y - SURFACE) / (AH - SURFACE);
+    const junk = Math.random() < .22;
+    this.things.push({
+      x: Math.random() < .5 ? -20 : AW + 20,
+      y: initial ? y : y,
+      vx: (Math.random() < .5 ? 1 : -1) * (16 + Math.random() * 34 + deep * 22),
+      junk,
+      crab: junk && Math.random() < .5,
+      size: junk ? 9 : 6 + deep * 9,
+      value: junk ? 0 : Math.round(5 + deep * 45),
+      hue: junk ? "#6a5a4a" : ["#ffd76a", "#f0a35e", "#7ce8e0", "#f2a2c4"][Math.floor(Math.random() * 4)],
+      wob: Math.random() * 6.28
+    });
+    if (initial) this.things[this.things.length - 1].x = Math.random() * AW;
+  },
+
+  update(dt, keys) {
+    this.time -= dt;
+    this.msgT = Math.max(0, this.msgT - dt);
+    this.flash = Math.max(0, this.flash - dt * 3);
+
+    const sp = 150;
+    if (keys.left) this.boat -= sp * dt;
+    if (keys.right) this.boat += sp * dt;
+    this.boat = Math.max(24, Math.min(AW - 24, this.boat));
+
+    /* Reeling in is slower than dropping, and slower still with a fish on
+       the line — otherwise there is no decision to make about going deep. */
+    const drop = 96, reel = this.hooked ? 58 : 78;
+    if (keys.down && !this.hooked) this.hookY += drop * dt;
+    if (keys.up) this.hookY -= reel * dt;
+    this.hookY = Math.max(SURFACE + 6, Math.min(AH - 12, this.hookY));
+
+    for (const th of this.things) {
+      th.x += th.vx * dt;
+      th.wob += dt * 3;
+      if (th.vx > 0 && th.x > AW + 30) th.x = -30;
+      if (th.vx < 0 && th.x < -30) th.x = AW + 30;
+    }
+
+    const hx = this.boat, hy = this.hookY;
+    if (this.hooked) {
+      this.hooked.x = hx; this.hooked.y = hy + 6;
+      if (hy <= SURFACE + 8) {
+        this.score += this.hooked.value;
+        this.flash = 1;
+        this.msg = (state.lang === "es" ? "+" : "+") + this.hooked.value;
+        this.msgT = 1.1;
+        this.things.splice(this.things.indexOf(this.hooked), 1);
+        this.hooked = null;
+        this.spawn(false);
+        Snd.pickup(1);
+      }
+    } else {
+      for (const th of this.things) {
+        /* generous by seven pixels: a hook on a line is not a precision
+           instrument, and playtesting a tight box gave two fish a minute */
+        if (Math.abs(th.x - hx) > th.size + 7 || Math.abs(th.y - hy) > th.size + 7) continue;
+        if (th.junk) {
+          /* the line snaps: you keep the score you banked, you lose the run */
+          this.hookY = SURFACE + 10;
+          this.msg = th.crab
+            ? (state.lang === "es" ? "¡un cangrejo!" : "a crab!")
+            : (state.lang === "es" ? "una bota vieja" : "an old boot");
+          this.msgT = 1.4;
+          this.time -= 3;
+          Snd.step_(true);
+        } else {
+          this.hooked = th;
+          Snd.chime();
+        }
+        break;
+      }
+    }
+    if (this.time <= 0) return { over: true, score: this.score };
+  },
+
+  key() { },
+
+  draw(g) {
+    /* sky over the pond, then the water, darkening with depth */
+    const sky = g.createLinearGradient(0, 0, 0, SURFACE);
+    sky.addColorStop(0, "#1a2b47"); sky.addColorStop(1, "#4a5a78");
+    g.fillStyle = sky; g.fillRect(0, 0, AW, SURFACE);
+    const wat = g.createLinearGradient(0, SURFACE, 0, AH);
+    wat.addColorStop(0, "#1d5f78"); wat.addColorStop(.45, "#123f5c"); wat.addColorStop(1, "#07172c");
+    g.fillStyle = wat; g.fillRect(0, SURFACE, AW, AH - SURFACE);
+
+    /* a few strands of weed on the bottom so depth has a floor */
+    g.strokeStyle = "rgba(60,120,90,.5)"; g.lineWidth = 3;
+    for (let i = 0; i < 12; i++) {
+      const x = 18 + i * 40, h = 16 + ((i * 37) % 23);
+      g.beginPath(); g.moveTo(x, AH); g.quadraticCurveTo(x + 6, AH - h * .6, x + 2, AH - h); g.stroke();
+    }
+
+    /* the waterline, drawn as a wave so it is not a ruled edge */
+    g.strokeStyle = "#7ce8e0"; g.lineWidth = 2;
+    g.beginPath();
+    for (let x = 0; x <= AW; x += 8) {
+      const y = SURFACE + Math.sin(x * .06 + this.time * 2) * 2;
+      x ? g.lineTo(x, y) : g.moveTo(x, y);
+    }
+    g.stroke();
+
+    /* line and hook */
+    g.strokeStyle = "rgba(236,235,232,.75)"; g.lineWidth = 1;
+    g.beginPath(); g.moveTo(this.boat, SURFACE - 8); g.lineTo(this.boat, this.hookY); g.stroke();
+    g.fillStyle = "#ecebe8";
+    g.beginPath(); g.arc(this.boat, this.hookY, 3, 0, 7); g.fill();
+
+    for (const th of this.things) {
+      const wob = Math.sin(th.wob) * 1.5;
+      if (th.junk && th.crab) {
+        g.fillStyle = "#c2604a";
+        g.beginPath(); g.arc(th.x, th.y + wob, th.size, 0, 7); g.fill();
+        g.strokeStyle = "#c2604a"; g.lineWidth = 2;
+        for (const s of [-1, 1]) {
+          g.beginPath();
+          g.moveTo(th.x + s * th.size, th.y + wob);
+          g.lineTo(th.x + s * (th.size + 7), th.y + wob - 5);
+          g.stroke();
+        }
+      } else if (th.junk) {
+        g.fillStyle = "#6a5a4a";
+        g.fillRect(th.x - 6, th.y - 8 + wob, 7, 14);
+        g.fillRect(th.x - 6, th.y + 3 + wob, 14, 4);
+      } else {
+        const dir = th.vx > 0 ? 1 : -1;
+        g.fillStyle = th.hue;
+        g.beginPath();
+        g.ellipse(th.x, th.y + wob, th.size, th.size * .58, 0, 0, 7);
+        g.fill();
+        g.beginPath();                                   // tail
+        g.moveTo(th.x - dir * th.size, th.y + wob);
+        g.lineTo(th.x - dir * (th.size + 7), th.y + wob - 5);
+        g.lineTo(th.x - dir * (th.size + 7), th.y + wob + 5);
+        g.closePath(); g.fill();
+        g.fillStyle = "#14161c";
+        g.beginPath(); g.arc(th.x + dir * th.size * .45, th.y - 1 + wob, 1.6, 0, 7); g.fill();
+        if (th === this.hooked) {
+          g.strokeStyle = "#ffd76a"; g.lineWidth = 2;
+          g.beginPath(); g.arc(th.x, th.y + wob, th.size + 5, 0, 7); g.stroke();
+        }
+      }
+    }
+
+    /* the boat, riding the wave it sits on */
+    const by = SURFACE - 6 + Math.sin(this.boat * .06 + this.time * 2) * 2;
+    g.fillStyle = "#8a5a2b";
+    g.beginPath();
+    g.moveTo(this.boat - 18, by); g.lineTo(this.boat + 18, by);
+    g.lineTo(this.boat + 12, by + 9); g.lineTo(this.boat - 12, by + 9);
+    g.closePath(); g.fill();
+    g.fillStyle = "#e08840";                             // the cat, fishing
+    g.beginPath(); g.arc(this.boat - 4, by - 7, 6, 0, 7); g.fill();
+    g.beginPath();
+    g.moveTo(this.boat - 9, by - 11); g.lineTo(this.boat - 7, by - 16); g.lineTo(this.boat - 4, by - 12);
+    g.closePath(); g.fill();
+    g.strokeStyle = "#5d4433"; g.lineWidth = 2;
+    g.beginPath(); g.moveTo(this.boat - 2, by - 6); g.lineTo(this.boat + 10, by - 20); g.stroke();
+
+    if (this.flash > 0) {
+      g.fillStyle = `rgba(255,215,106,${this.flash * .3})`;
+      g.fillRect(0, 0, AW, AH);
+    }
+    arcText(g, (state.lang === "es" ? "tiempo " : "time ") + Math.max(0, Math.ceil(this.time)),
+      AW - 10, 18, 13, this.time < 11 ? "#f07a6a" : "#ffd76a", "right");
+    if (this.msgT > 0) arcText(g, this.msg, AW / 2, 34, 15, "#7ce8e0", "center");
+  }
+};
+
+const ARCADE_GAMES = [GAME_PONG, GAME_SNAKE, GAME_RUNES, GAME_FISHING];
 
 /* ============================================================
    shared shell: loop, scores, curtain
@@ -5518,7 +5749,9 @@ const Arc = {
     this.game = gm;
     state.minigame = true;
     const t = AT();
-    $("#arcKicker").textContent = t.kicker;
+    /* the cave's games say "Crystal Cave"; the pier is above ground and above
+       water, and labelling it a cave arcade reads as a copy-paste slip */
+    $("#arcKicker").textContent = gm.kicker ? L(gm.kicker) : t.kicker;
     $("#arcKicker").style.color = gm.color;
     $("#arcTitle").textContent = L(gm.name);
     $("#arcHint").textContent = L(gm.hint);
@@ -5687,9 +5920,94 @@ function fbm(x, y, oct = 4) {
   return sum / norm;
 }
 
+/* ============================================================
+   THE COASTER
+
+   A closed circuit on the south-west shoulder of the island, far
+   enough from every temple and every road that nothing has to move
+   to make room for it, and high enough on the hillside that the
+   lift hill is visible from the plaza.
+
+   The track is a Catmull-Rom spline through fourteen control points
+   given as (radius, height) around a circle: a station, a chain lift
+   up to sixteen metres, a first drop, a wide banked turn out to the
+   far radius, then two camelbacks back down to the platform. The
+   shape lives in data because every other part of the coaster —
+   rails, sleepers, supports, the train, the ride camera — is derived
+   from the same curve, so moving a number here moves all of it.
+   ============================================================ */
+/* Site chosen against three constraints at once, because eyeballing it put
+   the first attempt eight metres out to sea and its platform square in the
+   middle of the road to the Great Warehouse: the whole ring has to sit inside
+   the coastline with margin, no temple precinct may fall within its radius,
+   and it wants to be far enough from the plaza to be a place you go rather
+   than a thing in the way. The spin puts the station beside that road instead
+   of across it — near enough to see from the path, clear of the walking line. */
+const COASTER = { x: -34, z: -19 };
+const COASTER_ROT = .55;
+/* [radius, height] — the lift crest is the highest point and everything
+   downstream of it trades that height back for speed */
+const COASTER_SPEC = [
+  [17.0, 3.4], [17.4, 3.5], [16.6, 8.0], [15.8, 16.2], [16.2, 15.4], [17.9, 5.2],
+  [20.0, 9.2], [20.4, 3.6], [19.1, 8.2], [17.0, 2.6], [15.0, 6.8], [14.6, 3.0],
+  [15.4, 5.0], [16.6, 3.5]
+];
+/* Filled in by initCoasterTrack() rather than at module load, because the
+   heights are measured from the ground and heightAt() is not defined yet at
+   this point in the file — flatMask, which it depends on, needs FLAT_DISCS
+   below. */
+let COASTER_CTRL = COASTER_SPEC.map(([r, h], i) => {
+  const a = i / COASTER_SPEC.length * Math.PI * 2 + COASTER_ROT;
+  return { x: COASTER.x + Math.cos(a) * r, y: h, z: COASTER.z + Math.sin(a) * r };
+});
+function initCoasterTrack() {
+  /* The listed heights are the shape; the ground has the final say. This
+     hillside rises ten metres across the circuit, so a track laid at the
+     nominal heights would have run underground for a third of the lap. */
+  COASTER_CTRL = COASTER_CTRL.map(p => ({ ...p, y: Math.max(p.y, heightAt(p.x, p.z) + 3.4) }));
+}
+
+/* Closed Catmull-Rom. Written out rather than pulled from three: this build
+   has no CatmullRomCurve3, and a uniform spline through evenly spaced points
+   is six lines anyway. */
+function coasterAt(t) {
+  const P = COASTER_CTRL, n = P.length;
+  const f = ((t % 1) + 1) % 1 * n, i = Math.floor(f), s = f - i;
+  const p0 = P[(i - 1 + n) % n], p1 = P[i % n], p2 = P[(i + 1) % n], p3 = P[(i + 2) % n];
+  const s2 = s * s, s3 = s2 * s;
+  const h = (a, b, c, d) => .5 * (2 * b + (-a + c) * s + (2 * a - 5 * b + 4 * c - d) * s2 + (-a + 3 * b - 3 * c + d) * s3);
+  return { x: h(p0.x, p1.x, p2.x, p3.x), y: h(p0.y, p1.y, p2.y, p3.y), z: h(p0.z, p1.z, p2.z, p3.z) };
+}
+
+/* Position, forward, right and up at a point on the circuit, with the track
+   banked into its own turns. Without the bank a coaster is a garden hose:
+   the roll is most of what makes a curve read as speed. */
+function coasterFrame(t) {
+  const e = 1 / 900;
+  const p = coasterAt(t), a = coasterAt(t - e), b = coasterAt(t + e);
+  let tx = b.x - a.x, ty = b.y - a.y, tz = b.z - a.z;
+  const tl = Math.hypot(tx, ty, tz) || 1;
+  tx /= tl; ty /= tl; tz /= tl;
+  /* right = forward x world-up, then up = right x forward */
+  let rx = tz, ry = 0, rz = -tx;
+  const rl = Math.hypot(rx, rz) || 1;
+  rx /= rl; rz /= rl;
+  /* signed curvature in the horizontal plane, from how fast the tangent turns */
+  const ax = a.x - p.x, az = a.z - p.z, bx = b.x - p.x, bz = b.z - p.z;
+  const curl = (ax * bz - az * bx) / (e * e * 4e4);
+  const bank = Math.max(-.75, Math.min(.75, curl * 1.5));
+  const cb = Math.cos(bank), sb = Math.sin(bank);
+  let ux = ry * tz - rz * ty, uy = rz * tx - rx * tz, uz = rx * ty - ry * tx;
+  const nrx = rx * cb + ux * sb, nry = ry * cb + uy * sb, nrz = rz * cb + uz * sb;
+  ux = ux * cb - rx * sb; uy = uy * cb - ry * sb; uz = uz * cb - rz * sb;
+  return { p, tx, ty, tz, rx: nrx, ry: nry, rz: nrz, ux, uy, uz };
+}
+
 /* areas that must stay dead flat: plaza, playground, pond, every
    temple, and a corridor along each path out of the plaza */
 const FLAT_DISCS = [
+  { x: COASTER.x + Math.cos(COASTER_ROT) * 20.4,
+    z: COASTER.z + Math.sin(COASTER_ROT) * 20.4, r: 7, fade: 6 },   // coaster station
   { x: 0, z: 0, r: 19, fade: 9 },       // plaza + fountain
   { x: 15, z: 5, r: 15, fade: 7 },      // physics playground
   /* the second crate pyramid used to stand at (-13,-11), four metres past the
@@ -6275,6 +6593,8 @@ class Game {
     this.buildSky();
     this.buildTemples();
     this.buildFish();
+    this.buildPier();
+    this.buildCoaster();
     this.buildCave();
     this.buildCat();
     this.initLightPool(IS_TOUCH ? 4 : 8);
@@ -7770,8 +8090,345 @@ class Game {
     return mat;
   }
 
+  /* ============ the pier: the fishing spot at the pond ============
+     Locked until the twelfth golden fish is in. It is built either way and
+     stands where you will walk past it early — a door you can see but not
+     open is worth more than one that appears when you have earned it. */
+  buildPier() {
+    const P = this.pondPos;
+    /* Built on the far shore, looking back across the water. On the near
+       shore the hut lands inside the plaza paving — the pond is only sixteen
+       metres from the kerb, and a fishing shack standing on the flagstones of
+       the lobby is not a fishing shack. */
+    const ang = Math.atan2(P.x, P.z) + Math.PI;    // deck runs back at the pond centre
+    const bx = P.x - Math.sin(ang) * (P.r + 1.4), bz = P.z - Math.cos(ang) * (P.r + 1.4);
+    const G = new Grp(); G.position.set(bx, 0, bz); G.rotation.y = ang; this.scene.add(G);
+    const wood = this.mat(0x6a4a2f, { roughness: .95, flatShading: true });
+    const plank = new StdMat({ map: this.crateTexture(), roughness: .9 });
+
+    /* decking out over the water, on piles */
+    for (let i = 0; i < 7; i++)
+      this.m(new BoxGeo(2.4, .16, 1), plank, 0, .42, i * 1.05, { parent: G, recv: true });
+    for (let i = 0; i < 4; i++)
+      for (const s of [-1, 1])
+        this.m(new CylGeo(.13, .16, 1.6, 6), wood, s * .95, -.3, i * 2.1 + .4, { parent: G });
+    /* handrail down one side only, so the other side reads as where you fish */
+    for (let i = 0; i < 4; i++)
+      this.m(new CylGeo(.07, .08, .9, 5), wood, -1.05, .9, i * 2.1 + .4, { parent: G });
+    this.m(new BoxGeo(.09, .09, 6.6), wood, -1.05, 1.32, 3.1, { parent: G });
+
+    /* a hut at the shore end, with a lantern that only burns once the pier
+       is open — the state of the lock, readable from across the lawn */
+    this.m(new BoxGeo(2.6, 2.2, 2.2), this.mat(0x7a6a52, { roughness: 1 }), 0, 1.2, -1.9, { parent: G, recv: true });
+    this.m(new BoxGeo(3.2, .22, 2.8), this.mat(0x8a4838, { roughness: .9, flatShading: true }), 0, 2.5, -1.9, { parent: G });
+    this.m(new BoxGeo(1, 1.5, .1), wood, 0, .95, -.82, { parent: G });
+    const lampM = new StdMat({ color: 0x3a3a42, emissive: new Col(0x7ce8e0), emissiveIntensity: 0, roughness: .4 });
+    this.m(new SphGeo(.2, 10, 8), lampM, 0, 2.35, -.7, { parent: G, cast: false });
+    const glow = this.glowSprite(CYAN, 1.6, new V3(0, 2.35, -.7));
+    glow.material.opacity = 0; G.add(glow);
+    const light = this.addLight(bx, 2.4, bz, 0x7ce8e0, 0, 16);
+
+    /* rods leaning on the rail, and a bucket */
+    for (let i = 0; i < 2; i++) {
+      const rod = this.m(new CylGeo(.03, .05, 3.2, 5), wood, -.8 + i * .25, 1.6, 1.4 + i * .5, { parent: G, cast: false });
+      rod.rotation.set(-.5, 0, .25 + i * .1);
+    }
+    this.m(new CylGeo(.32, .26, .5, 10), this.mat(0x4a4a52, { roughness: .8 }), .7, .68, 2.4, { parent: G, recv: true });
+
+    this.sbox(2.8, 2.4, 2.4, bx + Math.sin(ang) * 1.9, 1.2, bz + Math.cos(ang) * 1.9, ang);
+
+    /* Registered as a zone so it gets the prompt, the sound cue and the ring
+       for free. portal:true keeps it out of the temple count — it is a
+       minigame door, not an eighth temple. */
+    const meta = { key: "pier", kind: "fishing", color: CYAN, portal: true,
+      name: { es: "El Muelle de los Doce", en: "The Pier of Twelve" },
+      lore: { es: "Doce peces dorados nadan por la isla. Tráelos todos y el viejo te presta la barca.",
+              en: "Twelve golden fish swim around this island. Bring them all in and the old man lends you the boat." } };
+    const zx = bx + Math.sin(ang) * 2.4, zz = bz + Math.cos(ang) * 2.4;
+    const ring = this.m(new RingGeo(3, 3.5, 36),
+      this.bmat(new Col(CYAN).getHex(), { transparent: true, opacity: .3, side: SIDE_DOUBLE }),
+      zx, .09, zz, { rx: -Math.PI / 2, cast: false });
+    /* No `light` on the zone: the proximity loop drives zone.light itself, and
+       this one is the lock indicator — it answers to the fish count, not to
+       how close you are standing. */
+    const zone = { x: zx, z: zz, r: 4, meta, ring, discovered: false };
+    this.zones.push(zone);
+    this.pierZone = zone;
+    this.anims.push(t => {
+      const open = state.fish >= state.fishTotal;
+      lampM.emissiveIntensity = open ? 1.1 + Math.sin(t * 3) * .25 : 0;
+      glow.material.opacity = open ? .8 : 0;
+      light.intensity = open ? 7 : 0;
+      ring.material.opacity = (open ? .34 : .12) + Math.sin(t * 2) * .07 + (state.near === zone ? .3 : 0);
+    });
+  }
+
+  /* ============ the coaster ============
+     Rails, sleepers and supports all go into a single buffer. A tube per
+     segment would be a couple of thousand draw calls for one prop, and
+     nothing about a rail needs its own transform — the curve already knows
+     where every piece of it belongs. */
+  buildCoaster() {
+    initCoasterTrack();
+    const N = IS_TOUCH ? 200 : 320;
+    const frames = [];
+    for (let i = 0; i < N; i++) frames.push(coasterFrame(i / N));
+    this.coasterFrames = frames;
+
+    const V = [], C = [], c = new Col();
+    const push = (a, b, d, e, col) => {          // one quad, two triangles
+      for (const v of [a, b, d, a, d, e]) { V.push(v[0], v[1], v[2]); C.push(col.r, col.g, col.b); }
+    };
+    const steel = new Col(0x9aa0b0), tie = new Col(0x6a4a2f), post = new Col(0x7c5a38);
+
+    /* rails: a square tube either side, swept along the banked frame */
+    const RAIL = .55, W = .11;
+    for (let i = 0; i < N; i++) {
+      const f = frames[i], g2 = frames[(i + 1) % N];
+      for (const s of [-1, 1]) {
+        const corners = (fr) => {
+          const cx = fr.p.x + fr.rx * RAIL * s + fr.ux * .34;
+          const cy = fr.p.y + fr.ry * RAIL * s + fr.uy * .34;
+          const cz = fr.p.z + fr.rz * RAIL * s + fr.uz * .34;
+          return [
+            [cx - fr.rx * W - fr.ux * W, cy - fr.ry * W - fr.uy * W, cz - fr.rz * W - fr.uz * W],
+            [cx + fr.rx * W - fr.ux * W, cy + fr.ry * W - fr.uy * W, cz + fr.rz * W - fr.uz * W],
+            [cx + fr.rx * W + fr.ux * W, cy + fr.ry * W + fr.uy * W, cz + fr.rz * W + fr.uz * W],
+            [cx - fr.rx * W + fr.ux * W, cy - fr.ry * W + fr.uy * W, cz - fr.rz * W + fr.uz * W]
+          ];
+        };
+        const A = corners(f), B = corners(g2);
+        for (let k = 0; k < 4; k++) {
+          const k2 = (k + 1) % 4;
+          /* the top face of a rail catches the light; shade the rest down so
+             the track has a readable line along it from a distance */
+          c.copy(steel).multiplyScalar(k === 2 ? 1.15 : k === 0 ? .55 : .82);
+          push(A[k], A[k2], B[k2], B[k], c);
+        }
+      }
+      /* sleepers */
+      if (i % 3 === 0) {
+        const L = RAIL + .34, T = .09, D = .17;
+        const box = (fr, o) => [
+          [fr.p.x + fr.rx * o * L + fr.ux * .2 + fr.tx * D, fr.p.y + fr.ry * o * L + fr.uy * .2 + fr.ty * D, fr.p.z + fr.rz * o * L + fr.uz * .2 + fr.tz * D],
+          [fr.p.x + fr.rx * o * L + fr.ux * .2 - fr.tx * D, fr.p.y + fr.ry * o * L + fr.uy * .2 - fr.ty * D, fr.p.z + fr.rz * o * L + fr.uz * .2 - fr.tz * D],
+          [fr.p.x + fr.rx * o * L + fr.ux * (.2 - T) - fr.tx * D, fr.p.y + fr.ry * o * L + fr.uy * (.2 - T) - fr.ty * D, fr.p.z + fr.rz * o * L + fr.uz * (.2 - T) - fr.tz * D],
+          [fr.p.x + fr.rx * o * L + fr.ux * (.2 - T) + fr.tx * D, fr.p.y + fr.ry * o * L + fr.uy * (.2 - T) + fr.ty * D, fr.p.z + fr.rz * o * L + fr.uz * (.2 - T) + fr.tz * D]
+        ];
+        const L1 = box(f, -1), R1 = box(f, 1);
+        for (let k = 0; k < 4; k++) {
+          const k2 = (k + 1) % 4;
+          c.copy(tie).multiplyScalar(k === 0 ? 1.1 : .78);
+          push(L1[k], L1[k2], R1[k2], R1[k], c);
+        }
+      }
+      /* supports, every so often, straight down to whatever ground is there */
+      if (i % 14 === 0) {
+        const f2 = frames[i];
+        const gy = heightAt(f2.p.x, f2.p.z);
+        const top = f2.p.y - .1;
+        if (top - gy > .8) {
+          const S = .17;
+          const legs = [[-1, -1], [1, -1], [1, 1], [-1, 1]].map(([a, b]) => [
+            f2.p.x + f2.tx * a * S * 2 + f2.rx * b * S * 2,
+            f2.p.z + f2.tz * a * S * 2 + f2.rz * b * S * 2
+          ]);
+          for (let k = 0; k < 4; k++) {
+            const k2 = (k + 1) % 4;
+            c.copy(post).multiplyScalar(k % 2 ? .72 : 1);
+            push([legs[k][0], gy, legs[k][1]], [legs[k2][0], gy, legs[k2][1]],
+                 [legs[k2][0], top, legs[k2][1]], [legs[k][0], top, legs[k][1]], c);
+          }
+          /* one cross brace halfway up, which is what makes a post a trestle */
+          const my = (gy + top) / 2;
+          c.copy(post).multiplyScalar(.85);
+          for (let k = 0; k < 4; k++) {
+            const k2 = (k + 1) % 4;
+            push([legs[k][0], my - .12, legs[k][1]], [legs[k2][0], my - .12, legs[k2][1]],
+                 [legs[k2][0], my + .12, legs[k2][1]], [legs[k][0], my + .12, legs[k][1]], c);
+          }
+          this.addOccluder(f2.p.x, (gy + top) / 2, f2.p.z, 1.2);
+        }
+      }
+    }
+    const geo = new BufGeo();
+    geo.setAttribute("position", new F32Attr(new Float32Array(V), 3));
+    geo.setAttribute("color", new F32Attr(new Float32Array(C), 3));
+    geo.computeVertexNormals();
+    const track = new Mesh(geo, new StdMat({ vertexColors: true, roughness: .62, metalness: .25,
+                                             flatShading: true, side: SIDE_DOUBLE }));
+    track.castShadow = true; track.receiveShadow = true;
+    this.scene.add(track);
+    this.outdoorOnly.push(track);
+
+    this.buildCoasterStation();
+    this.buildCoasterTrain();
+  }
+
+  buildCoasterStation() {
+    const f = coasterFrame(0);
+    const ang = Math.atan2(f.tx, f.tz);
+    const G = new Grp(); G.position.set(f.p.x, 0, f.p.z); G.rotation.y = ang; this.scene.add(G);
+    this.outdoorOnly.push(G);
+    const wood = this.mat(0x6a4a2f, { roughness: .95, flatShading: true });
+    const deck = new StdMat({ map: this.crateTexture(), roughness: .9 });
+    const iron = this.mat(0x2e2b34, { roughness: .6, metalness: .45 });
+
+    /* a platform beside the track, not under it */
+    this.m(new BoxGeo(2.6, .3, 9), deck, -2.1, f.p.y - .5, 0, { parent: G, recv: true });
+    for (let i = 0; i < 4; i++)
+      this.m(new CylGeo(.16, .2, f.p.y, 6), wood, -2.1, (f.p.y - .5) / 2, -3.6 + i * 2.4, { parent: G });
+    this.sbox(2.6, .6, 9, f.p.x - Math.cos(ang) * 2.1, f.p.y - .5, f.p.z + Math.sin(ang) * 2.1, ang);
+    /* posts and a canopy, so it reads as a station and not as a jetty */
+    for (const s of [-1, 1]) for (const zz of [-3.6, 3.6])
+      this.m(new CylGeo(.11, .13, 3.2, 6), iron, -2.1 + s * 1.05, f.p.y + 1.25, zz, { parent: G });
+    this.m(new BoxGeo(3.2, .18, 8.6), this.mat(0x8a4838, { roughness: .9, flatShading: true }),
+      -2.1, f.p.y + 2.9, 0, { parent: G, recv: true });
+    /* bunting along the canopy edge */
+    for (let i = 0; i < 14; i++) {
+      const col = [GREEN, AMBER, PINK, BLUE][i % 4];
+      this.m(new ConeGeo(.16, .34, 3), this.bmat(col, { side: SIDE_DOUBLE }),
+        -.55, f.p.y + 2.66, -4 + i * .62, { parent: G, rx: Math.PI, cast: false });
+    }
+    const sign = this.makeLabel(state.lang === "es" ? "LA BAJADA DEL GATO" : "THE CAT'S PLUNGE", "#f0a35e", 1.5);
+    sign.position.set(-2.1, f.p.y + 4.3, 0); G.add(sign);
+    this.addLight(f.p.x - Math.cos(ang) * 2.1, f.p.y + 2.4, f.p.z + Math.sin(ang) * 2.1, 0xffb371, 7, 18);
+    this.addOccluder(f.p.x, f.p.y + 1, f.p.z, 3);
+
+    const meta = { key: "coaster", kind: "ride", color: AMBER, portal: true,
+      name: { es: "La Bajada del Gato", en: "The Cat's Plunge" },
+      lore: { es: "Dieciséis metros de subida por cadena y todo lo demás por gravedad. El gato no la construyó; simplemente estaba aquí.",
+              en: "Sixteen metres up on a chain and everything after that on gravity alone. The cat did not build it; it was simply here." } };
+    const zx = f.p.x - Math.cos(ang) * 3.4, zz2 = f.p.z + Math.sin(ang) * 3.4;
+    const ring = this.m(new RingGeo(3, 3.6, 36),
+      this.bmat(new Col(AMBER).getHex(), { transparent: true, opacity: .35, side: SIDE_DOUBLE }),
+      zx, .09, zz2, { rx: -Math.PI / 2, cast: false });
+    const zone = { x: zx, z: zz2, r: 4.2, meta, ring, discovered: false };
+    this.zones.push(zone);
+    this.anims.push(t => {
+      ring.material.opacity = .3 + Math.sin(t * 2) * .08 + (state.near === zone ? .35 : 0);
+    });
+  }
+
+  /* ---- the train ----
+     Three cars nose to tail, riding the same curve everything else was built
+     from. Speed comes out of a height budget rather than a constant: the
+     train trades the lift hill back for pace, so it crawls over the crests
+     and howls through the dips without any of that being animated by hand. */
+  buildCoasterTrain() {
+    const G = new Grp(); this.scene.add(G); this.outdoorOnly.push(G);
+    const shell = this.mat(0xd6543c, { roughness: .55, flatShading: true });
+    const trim = this.mat(0xffd76a, { roughness: .4, metalness: .3 });
+    const dark = this.mat(0x2e2b34, { roughness: .7 });
+    const cars = [];
+    for (let i = 0; i < 3; i++) {
+      const car = new Grp(); G.add(car);
+      this.m(new BoxGeo(1.05, .62, 1.5), i ? shell : this.mat(0xf0a35e, { roughness: .55, flatShading: true }),
+        0, .42, 0, { parent: car, recv: true });
+      this.m(new BoxGeo(1.12, .12, 1.56), trim, 0, .74, 0, { parent: car, cast: false });
+      if (!i) this.m(new ConeGeo(.34, .62, 6), shell, 0, .46, .92, { parent: car, rx: Math.PI / 2 });
+      this.m(new BoxGeo(.9, .28, .1), dark, 0, .78, -.4, { parent: car, cast: false });  // lap bar
+      for (const s of [-1, 1]) for (const z of [-.5, .5])
+        this.m(new CylGeo(.17, .17, .1, 8), dark, s * .52, .16, z, { parent: car, rz: Math.PI / 2, cast: false });
+      /* a passenger, so the thing has a reason to be moving */
+      const rider = this.m(new SphGeo(.2, 10, 8), this.mat([0xe08840, 0x8fb0ff, 0x7fdca8][i], { roughness: .8 }),
+        0, .82, -.1, { parent: car, cast: false });
+      if (!i) this.frontRider = rider;      // hidden while you are the one sitting there
+      cars.push(car);
+    }
+    this.coaster = { u: 0, v: 6, cars, riding: false, rideU: 0, group: G };
+
+    const CREST = 16.4, GRAV = 9.5, LIFT_A = .10, LIFT_B = .235;
+    /* one lap in track units, so speed in m/s converts to progress */
+    let len = 0;
+    for (let i = 0; i < this.coasterFrames.length; i++) {
+      const a = this.coasterFrames[i], b = this.coasterFrames[(i + 1) % this.coasterFrames.length];
+      len += Math.hypot(b.p.x - a.p.x, b.p.y - a.p.y, b.p.z - a.p.z);
+    }
+    this.coaster.len = len;
+
+    this.anims.push((t, dt) => {
+      const C = this.coaster;
+      const here = coasterAt(C.u);
+      /* the chain lift is the one stretch that does not obey the height
+         budget — that is what a chain lift is for */
+      if (C.u > LIFT_A && C.u < LIFT_B) C.v += (5.2 - C.v) * Math.min(1, dt * 2);
+      else C.v = Math.sqrt(Math.max(9, 2 * GRAV * (CREST - here.y) + 4));
+      C.u = (C.u + C.v * dt / len) % 1;
+      for (let i = 0; i < C.cars.length; i++) {
+        const f = coasterFrame(C.u - i * (1.7 / len));
+        C.cars[i].position.set(f.p.x, f.p.y + .34, f.p.z);
+        /* build the car's basis straight from the track frame: three.js here
+           has no Matrix4.lookAt helper worth the round trip */
+        C.cars[i].matrixAutoUpdate = false;
+        const m = C.cars[i].matrix.elements;
+        m[0] = f.rx; m[1] = f.ry; m[2] = f.rz; m[3] = 0;
+        m[4] = f.ux; m[5] = f.uy; m[6] = f.uz; m[7] = 0;
+        m[8] = f.tx; m[9] = f.ty; m[10] = f.tz; m[11] = 0;
+        m[12] = f.p.x + f.ux * .34; m[13] = f.p.y + f.uy * .34; m[14] = f.p.z + f.uz * .34; m[15] = 1;
+        C.cars[i].matrixWorldNeedsUpdate = true;
+      }
+      if (C.riding) {
+        C.rideU += C.v * dt / len;
+        if (C.rideU >= 1) this.leaveCoaster();
+      }
+    });
+  }
+
+  boardCoaster() {
+    const C = this.coaster;
+    if (!C || C.riding) return;
+    C.riding = true; C.rideU = 0;
+    state.riding = true;
+    this.catGrp.visible = false;
+    if (this.frontRider) this.frontRider.visible = false;
+    this.catBody.velocity.setZero();
+    toast(state.lang === "es" ? "¡Agárrate!" : "Hold on!", 1800);
+    Snd.chime();
+  }
+  leaveCoaster() {
+    const C = this.coaster;
+    C.riding = false;
+    state.riding = false;
+    this.catGrp.visible = true;
+    if (this.frontRider) this.frontRider.visible = true;
+    /* put the cat back on the platform rather than wherever the train stopped */
+    const f = coasterFrame(0);
+    const ang = Math.atan2(f.tx, f.tz);
+    this.catBody.position.set(f.p.x - Math.cos(ang) * 2.1, f.p.y + .4, f.p.z + Math.sin(ang) * 2.1);
+    this.catBody.velocity.setZero();
+    this.camDistSmooth = null;
+    Snd.fanfare();
+  }
+
+  /* the ride camera: in the front car, looking down the track */
+  rideCamera() {
+    const C = this.coaster, f = coasterFrame(C.u);
+    /* Seat height, not head-in-the-headrest: the first pass sat the lens
+       exactly where the front passenger's head is and the whole ride was an
+       orange sphere. The rider is hidden while you are in their seat. */
+    this.camera.up.set(f.ux, f.uy, f.uz);
+    /* Dead centre of the front car, at head height. Offsetting backwards to
+       "see the car" puts the lens inside the second one, which is 1.7 metres
+       behind and 1.5 long: there is no gap between them to sit in. */
+    this.camera.position.set(
+      f.p.x + f.ux * 1.35,
+      f.p.y + f.uy * 1.35,
+      f.p.z + f.uz * 1.35);
+    /* look a little way down the track rather than straight along the
+       tangent: on a crest the tangent points at the sky, and the drop you
+       cannot see is the drop that does not scare anyone */
+    const a = coasterFrame(C.u + .03);
+    this.camera.lookAt(new V3(a.p.x + a.ux * .9, a.p.y + a.uy * .9, a.p.z + a.uz * .9));
+  }
+
   /* ============ nature: trees, rocks, flowers ============ */
   isClearOf(x, z, margin = 6) {
+    /* nothing grows through the coaster */
+    {
+      const d = Math.hypot(x - COASTER.x, z - COASTER.z);
+      if (d > 12 && d < 23) return false;
+    }
     const d = Math.hypot(x, z);
     if (d > coastRadius(Math.atan2(z, x)) - 7) return false;                // in the sea
     if (heightAt(x, z) < .5) return false;                                  // on the sand
@@ -10204,7 +10861,7 @@ class Game {
 
   control(dt) {
     const b = this.catBody;
-    if (state.minigame) {
+    if (state.minigame || state.riding) {
       b.velocity.x *= .82; b.velocity.z *= .82;
       return;
     }
@@ -10502,6 +11159,11 @@ class Game {
     }
     this.camLook.lerp(new V3(pos.x + cs * 3, pos.y + 1, pos.z + cc * 3), Math.min(1, dt * 6));
     this.camera.lookAt(this.camLook);
+    /* Riding overrides the rig rather than replacing it: the occlusion solver
+       above still runs and its answer is simply thrown away, which is a few
+       microseconds against not threading a second camera mode through it. */
+    if (state.riding) this.rideCamera();
+    else if (this.camera.up.y !== 1) this.camera.up.set(0, 1, 0);
     this.fovGoal = (KEYS.shift && spd > 10) ? 68 : 60;
     if (Math.abs(this.camera.fov - this.fovGoal) > .1) {
       this.camera.fov += (this.fovGoal - this.camera.fov) * Math.min(1, dt * 4);
@@ -10574,7 +11236,10 @@ class Game {
 
 /* ---------- keyboard reset ---------- */
 addEventListener("keydown", e => {
-  if (e.key.toLowerCase() === "r" && game) game.reset();
+  const k = e.key.toLowerCase();
+  /* bail out of the coaster: a ride you cannot get off is a trap, not a ride */
+  if (state.riding && game && (k === "escape" || k === "e")) { game.leaveCoaster(); return; }
+  if (k === "r" && game) game.reset();
 });
 
 /* ---------- boot ---------- */
