@@ -1,0 +1,35 @@
+:root {
+  --bg: #0a0a0c;
+  --ink: #ecebe8;
+  --dim: #b6b3ac;
+  --green: #7fdca8;
+  --gold: #ffd76a;
+}
+* { box-sizing: border-box; }
+html, body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  background: var(--bg);
+  color: var(--ink);
+  overflow: hidden;
+  overscroll-behavior: none;
+  font-family: "Space Grotesk", system-ui, sans-serif;
+  touch-action: none;
+}
+canvas { display: block; }
+
+.hud {
+  position: fixed;
+  left: 20px;
+  bottom: 20px;
+  padding: 10px 14px;
+  border: 1px solid #1c1c21;
+  border-radius: 10px;
+  background: rgba(13, 13, 16, .82);
+  font: 400 13px/1.5 "JetBrains Mono", ui-monospace, monospace;
+  color: var(--dim);
+  pointer-events: none;
+}
+.hud b { color: var(--gold); }
+.hud .k { color: var(--green); }

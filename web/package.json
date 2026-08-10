@@ -1,0 +1,28 @@
+{
+  "name": "isla-del-gato",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "models": "node scripts/gen-manifest.mjs",
+    "predev": "npm run models",
+    "prebuild": "npm run models",
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint"
+  },
+  "dependencies": {
+    "@react-three/fiber": "^8.17.10",
+    "cannon-es": "^0.20.0",
+    "next": "^14.2.15",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "three": "^0.169.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.7.5",
+    "@types/react": "^18.3.11",
+    "@types/three": "^0.169.0",
+    "typescript": "^5.6.3"
+  }
+}
