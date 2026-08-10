@@ -132,15 +132,18 @@ export const MODELS: Record<string, ModelSpec> = {
   },
   "stall-drinks": {
     file: "stall-drinks.glb", scale: 1.75, collider: "box",
-    note: "As stall-food.", fallback: () => new THREE.Group()
+    note: "Drinks kiosk. Origin on the ground, front facing +Z, about 1.5m tall before scale.",
+    fallback: () => new THREE.Group()
   },
   "stall-information": {
     file: "stall-information.glb", scale: 1.75, collider: "box",
-    note: "As stall-food.", fallback: () => new THREE.Group()
+    note: "Information kiosk. Origin on the ground, front facing +Z, about 1.5m tall before scale.",
+    fallback: () => new THREE.Group()
   },
   "stall-toilets": {
     file: "stall-toilets.glb", scale: 1.75, collider: "box",
-    note: "As stall-food.", fallback: () => new THREE.Group()
+    note: "Toilet block. Origin on the ground, front facing +Z, about 1.5m tall before scale.",
+    fallback: () => new THREE.Group()
   },
   "park-bench": {
     file: "park-bench.glb", scale: 1.8, collider: "none",
