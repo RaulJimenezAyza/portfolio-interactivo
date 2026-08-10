@@ -4670,6 +4670,21 @@ class Game {
      plan and a coin-flip about that is exactly how the first park wall went
      in lying on its side. Decoding the positions showed 33 distinct Z values
      against 18 X, and that settled it. */
+  /* Rails swept along the spline, not tiled out of prefab straights.
+
+     Tiling was tried and is wrong here: a four-metre straight laid on a
+     seventeen-metre radius meets the next one at an angle, so consecutive
+     pieces do not line up, and spacing them evenly in `t` rather than by arc
+     length left some overlapping and others gaping. A swept rail follows the
+     curve because it is generated from it — each ring of vertices sits on the
+     frame at its own point, so there is nothing left to line up.
+
+     A whole-coaster model would not have helped either: it is static
+     geometry with no path in it, so the curve would still have to be authored
+     by hand to drive the train and the ride camera.
+
+     What the kit does supply usefully is the columns. They stand vertically,
+     so they have no curve to fight. */
   buildCoaster() {
     initCoasterTrack();
     const N = IS_TOUCH ? 200 : 320;
@@ -4677,45 +4692,78 @@ class Game {
     for (let i = 0; i < N; i++) frames.push(coasterFrame(i / N));
     this.coasterFrames = frames;
 
-    let len = 0;
+    const V = [], C = [], c = new Col();
+    const push = (a, b, d, e, col) => {          // one quad, two triangles
+      for (const v of [a, b, d, a, d, e]) { V.push(v[0], v[1], v[2]); C.push(col.r, col.g, col.b); }
+    };
+    const steel = new Col(0x9aa0b0), tie = new Col(0x6a4a2f), post = new Col(0x7c5a38);
+
+    /* rails: a square tube either side, swept along the banked frame */
+    const RAIL = .55, W = .11;
     for (let i = 0; i < N; i++) {
-      const p = frames[i].p, q = frames[(i + 1) % N].p;
-      len += Math.hypot(q.x - p.x, q.y - p.y, q.z - p.z);
+      const f = frames[i], g2 = frames[(i + 1) % N];
+      for (const s of [-1, 1]) {
+        const corners = (fr) => {
+          const cx = fr.p.x + fr.rx * RAIL * s + fr.ux * .34;
+          const cy = fr.p.y + fr.ry * RAIL * s + fr.uy * .34;
+          const cz = fr.p.z + fr.rz * RAIL * s + fr.uz * .34;
+          return [
+            [cx - fr.rx * W - fr.ux * W, cy - fr.ry * W - fr.uy * W, cz - fr.rz * W - fr.uz * W],
+            [cx + fr.rx * W - fr.ux * W, cy + fr.ry * W - fr.uy * W, cz + fr.rz * W - fr.uz * W],
+            [cx + fr.rx * W + fr.ux * W, cy + fr.ry * W + fr.uy * W, cz + fr.rz * W + fr.uz * W],
+            [cx - fr.rx * W + fr.ux * W, cy - fr.ry * W + fr.uy * W, cz - fr.rz * W + fr.uz * W]
+          ];
+        };
+        const A = corners(f), B = corners(g2);
+        for (let k = 0; k < 4; k++) {
+          const k2 = (k + 1) % 4;
+          /* the top face of a rail catches the light; shade the rest down so
+             the track has a readable line along it from a distance */
+          c.copy(steel).multiplyScalar(k === 2 ? 1.15 : k === 0 ? .55 : .82);
+          push(A[k], A[k2], B[k2], B[k], c);
+        }
+      }
+      /* sleepers */
+      if (i % 3 === 0) {
+        const L = RAIL + .34, T = .09, D = .17;
+        const box = (fr, o) => [
+          [fr.p.x + fr.rx * o * L + fr.ux * .2 + fr.tx * D, fr.p.y + fr.ry * o * L + fr.uy * .2 + fr.ty * D, fr.p.z + fr.rz * o * L + fr.uz * .2 + fr.tz * D],
+          [fr.p.x + fr.rx * o * L + fr.ux * .2 - fr.tx * D, fr.p.y + fr.ry * o * L + fr.uy * .2 - fr.ty * D, fr.p.z + fr.rz * o * L + fr.uz * .2 - fr.tz * D],
+          [fr.p.x + fr.rx * o * L + fr.ux * (.2 - T) - fr.tx * D, fr.p.y + fr.ry * o * L + fr.uy * (.2 - T) - fr.ty * D, fr.p.z + fr.rz * o * L + fr.uz * (.2 - T) - fr.tz * D],
+          [fr.p.x + fr.rx * o * L + fr.ux * (.2 - T) + fr.tx * D, fr.p.y + fr.ry * o * L + fr.uy * (.2 - T) + fr.ty * D, fr.p.z + fr.rz * o * L + fr.uz * (.2 - T) + fr.tz * D]
+        ];
+        const L1 = box(f, -1), R1 = box(f, 1);
+        for (let k = 0; k < 4; k++) {
+          const k2 = (k + 1) % 4;
+          c.copy(tie).multiplyScalar(k === 0 ? 1.1 : .78);
+          push(L1[k], L1[k2], R1[k2], R1[k], c);
+        }
+      }
     }
-    this.coasterLen = len;
 
-    const G = new Grp(); this.scene.add(G); this.outdoorOnly.push(G);
-    const SCALE = 1.28;                       // matches the cars, 0.9m across
-    const PIECE = 4 * SCALE;                  // what one piece covers
-    const count = Math.max(8, Math.round(len / PIECE));
-    for (let i = 0; i < count; i++) {
-      const f = coasterFrame(i / count);
-      const piece = getModel("coaster-track");
-      piece.scale.setScalar(SCALE);
-      /* the frame's own basis, same as the train rides on */
-      piece.matrixAutoUpdate = false;
-      const m = piece.matrix.elements;
-      m[0] = f.rx * SCALE; m[1] = f.ry * SCALE; m[2] = f.rz * SCALE; m[3] = 0;
-      m[4] = f.ux * SCALE; m[5] = f.uy * SCALE; m[6] = f.uz * SCALE; m[7] = 0;
-      m[8] = f.tx * SCALE; m[9] = f.ty * SCALE; m[10] = f.tz * SCALE; m[11] = 0;
-      m[12] = f.p.x; m[13] = f.p.y; m[14] = f.p.z; m[15] = 1;
-      piece.matrixWorldNeedsUpdate = true;
-      G.add(piece);
-    }
+    const geo = new BufGeo();
+    geo.setAttribute("position", new F32Attr(new Float32Array(V), 3));
+    geo.setAttribute("color", new F32Attr(new Float32Array(C), 3));
+    geo.computeVertexNormals();
+    const track = new Mesh(geo, new StdMat({ vertexColors: true, roughness: .62, metalness: .25,
+                                             flatShading: true, side: SIDE_DOUBLE }));
+    track.castShadow = true; track.receiveShadow = true;
+    this.scene.add(track);
+    this.outdoorOnly.push(track);
 
-    /* supports: a stack of the kit's columns from the ground to the rail,
-       every so often. One metre each, so the count is the drop. */
-    for (let i = 0; i < N; i += 16) {
+    /* supports from the kit, stacked a metre at a time so their height is
+       the drop rather than a guess */
+    const SG = new Grp(); this.scene.add(SG); this.outdoorOnly.push(SG);
+    for (let i = 0; i < N; i += 14) {
       const f = frames[i];
       const gy = heightAt(f.p.x, f.p.z);
-      const drop = f.p.y - gy - .4;
+      const drop = f.p.y - gy - .45;
       if (drop < 1.2) continue;
-      const n = Math.round(drop);
-      for (let k = 0; k < n; k++) {
+      for (let k = 0; k < Math.round(drop); k++) {
         const col = getModel("coaster-support");
         col.position.set(f.p.x, gy + k, f.p.z);
-        col.scale.set(1.3, 1.02, 1.3);        // a hair over 1m so they meet
-        G.add(col);
+        col.scale.set(1.4, 1.02, 1.4);
+        SG.add(col);
       }
       this.addOccluder(f.p.x, (gy + f.p.y) / 2, f.p.z, 1.2);
     }
