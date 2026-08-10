@@ -59,9 +59,15 @@ export function buildCatStatue(): THREE.Group {
     m(new THREE.SphereGeometry(.135, 12, 8), stone, s * .2, B, .46).scale.set(1, .7, 1.3);
   }
 
-  /* head */
-  m(new THREE.SphereGeometry(.36, 18, 14), stone, 0, B + 1.42, .12).scale.set(1, .94, .98);
-  m(new THREE.SphereGeometry(.19, 14, 10), stone, 0, B + 1.32, .38).scale.set(1.2, .82, .95);
+  /* head. The parts that say which way this thing is facing get names, for the
+     same reason the folder's README lists child names: a .glb that replaces
+     this one should be interchangeable with it, and that includes being
+     inspectable the same way. */
+  m(new THREE.SphereGeometry(.36, 18, 14), stone, 0, B + 1.42, .12).name = "head";
+  (G.getObjectByName("head") as THREE.Mesh).scale.set(1, .94, .98);
+  const muzzle = m(new THREE.SphereGeometry(.19, 14, 10), stone, 0, B + 1.32, .38);
+  muzzle.name = "muzzle";
+  muzzle.scale.set(1.2, .82, .95);
   m(new THREE.ConeGeometry(.08, .1, 4), shade, 0, B + 1.37, .54, { rx: -Math.PI / 2 });
   for (const s of [-1, 1]) {
     /* a bare cone reads as a horn; the inner one is what makes it an ear */
@@ -80,6 +86,7 @@ export function buildCatStatue(): THREE.Group {
     m(new THREE.SphereGeometry(.105, 10, 8), shade, s * .14, B + 1.47, .32, { cast: false });
     const e = m(new THREE.SphereGeometry(.082, 10, 8), eyeMat, s * .14, B + 1.47, .36, { cast: false });
     e.scale.set(1, 1.3, .75);
+    e.name = s < 0 ? "eyeL" : "eyeR";
     eyes.push(e);
   }
 

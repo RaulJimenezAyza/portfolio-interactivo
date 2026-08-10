@@ -20,10 +20,6 @@ export default function Page() {
         dpr={[1, 2]}
         camera={{ position: [4.2, 3.4, 5.4], fov: 50, near: .1, far: 400 }}
         gl={{ antialias: true, toneMapping: ACESFilmicToneMapping, toneMappingExposure: 1.22 }}
-        /* straight through to react-use-measure: no debounce and no scroll
-           listeners, so the first ResizeObserver entry is acted on rather than
-           queued behind a timer */
-        resize={{ debounce: 0, scroll: false }}
         onCreated={s => { (window as unknown as Record<string, unknown>).__r3f = s; }}
       >
         <color attach="background" args={["#122a4e"]} />
