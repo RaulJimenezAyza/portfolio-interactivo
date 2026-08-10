@@ -4656,7 +4656,10 @@ class Game {
       /* orientation comes from the chord, not from an assumption about which
          way the geometry was authored */
       const ry = Math.atan2(dx, dz);
-      const g = new Grp(); g.position.set(mx, PARK_Y, mz); g.rotation.y = ry;
+      /* the lowest of the two ends, so a segment on a slope beds into the
+         hill rather than hanging off it at one end */
+      const gy = Math.min(heightAt(p0.x, p0.z), heightAt(p1.x, p1.z));
+      const g = new Grp(); g.position.set(mx, gy, mz); g.rotation.y = ry;
       this.scene.add(g); this.outdoorOnly.push(g);
       /* the wall itself, plus a coping course so the top edge catches light */
       this.m(new BoxGeo(.5, H, len + .12), face, 0, H / 2, 0, { parent: g, recv: true });
@@ -4671,7 +4674,7 @@ class Game {
           0, H + 1, -len / 2, { parent: g, cast: false });
       }
       /* it has to stop you, or it is scenery pretending to be a boundary */
-      this.sbox(.6, H, len, mx, PARK_Y + H / 2, mz, ry);
+      this.sbox(.6, H, len, mx, gy + H / 2, mz, ry);
       built++;
     }
     return built;
@@ -4684,13 +4687,14 @@ class Game {
      turned up rather than off the numbers the old box happened to have. */
   kiosk(key, x, z, ry) {
     const G = getModel(key);
-    G.position.set(x, PARK_Y, z); G.rotation.y = ry;
+    const gy = heightAt(x, z);
+    G.position.set(x, gy, z); G.rotation.y = ry;
     this.scene.add(G); this.outdoorOnly.push(G);
     const size = modelSize(G);
-    this.sbox(size.x, size.y, size.z, x, PARK_Y + size.y / 2, z, ry);
-    this.addOccluder(x, PARK_Y + size.y / 2, z, Math.max(size.x, size.z) * .6);
+    this.sbox(size.x, size.y, size.z, x, gy + size.y / 2, z, ry);
+    this.addOccluder(x, gy + size.y / 2, z, Math.max(size.x, size.z) * .6);
     /* a lamp over the counter, so the midway is lit by the stalls on it */
-    this.addLight(x, PARK_Y + size.y + .4, z, 0xffd9a0, 4, 12);
+    this.addLight(x, gy + size.y + .4, z, 0xffd9a0, 4, 12);
   }
 
   /* ---- midway furniture ----
@@ -4698,7 +4702,12 @@ class Game {
      not stopping you at one. */
   parkProp(key, x, z, ry) {
     const G = getModel(key);
-    G.position.set(x, PARK_Y, z); G.rotation.y = ry;
+    /* On the ground that is actually there, not on the park's nominal level.
+       PARK_Y is what the island is flat *at*, but its skirt falls away near
+       the shore and the audit duly found paving tiles a metre under it. Every
+       one of these models has its origin at its own foot, so heightAt is the
+       whole answer. */
+    G.position.set(x, heightAt(x, z), z); G.rotation.y = ry;
     this.scene.add(G); this.outdoorOnly.push(G);
     return G;
   }
