@@ -2492,6 +2492,9 @@ class Game {
        model. They are methods, so they need the instance — which is why this
        lives here and not next to the registry itself. */
     registerFallback("cat-statue", () => this.catStatue());
+    registerFallback("pine", () => this.pineModel());
+    registerFallback("lamp", () => this.lampModel());
+    registerFallback("crate", () => this.crateModel());
 
     this.buildTerrain();
     this.buildPlaza();
@@ -3737,14 +3740,33 @@ class Game {
     this.addOccluder(x, 1.6, z, 1);
   }
 
-  lampPost(x, z) {
-    const g = new Grp(); g.position.set(x, 0, z); this.scene.add(g);
+  crateModel() {
+    if (!this.crateMat) this.crateMat = new StdMat({ map: this.crateTexture(), roughness: .92 });
+    const g = new Grp();
+    this.m(new BoxGeo(1.3, 1.3, 1.3), this.crateMat, 0, 0, 0, { parent: g, recv: true });
+    return g;
+  }
+
+  lampModel() {
+    const g = new Grp();
     const iron = this.mat(0x232028, { roughness: .6, metalness: .5 });
     this.m(new CylGeo(.09, .13, 3.4, 7), iron, 0, 1.7, 0, { parent: g });
-    this.m(new SphGeo(.26, 10, 8), new StdMat({ color: 0xffd9a0, emissive: new Col(0xffb96a), emissiveIntensity: .85, roughness: .3 }), 0, 3.5, 0, { parent: g, cast: false });
+    /* named, because the scene hangs the glow and the light off it and a
+       replacement model has to offer the same handle — the folder's README
+       lists it for exactly this reason */
+    this.m(new SphGeo(.26, 10, 8), new StdMat({ color: 0xffd9a0, emissive: new Col(0xffb96a), emissiveIntensity: .85, roughness: .3 }), 0, 3.5, 0, { parent: g, cast: false }).name = "bulb";
     this.m(new ConeGeo(.4, .3, 8), iron, 0, 3.85, 0, { parent: g });
-    g.add(this.glowSprite(0xffb96a, 2, new V3(0, 3.5, 0)));
-    const lamp = this.addLight(x, 3.5, z, 0xffb371, 7, 17);
+    return g;
+  }
+  lampPost(x, z) {
+    const g = getModel("lamp");
+    g.position.set(x, 0, z); this.scene.add(g);
+    /* the glow follows the bulb wherever the model puts it, so a taller lamp
+       does not leave its halo hanging at the old height */
+    const bulb = g.getObjectByName("bulb");
+    const by = bulb ? bulb.position.y : 3.5;
+    g.add(this.glowSprite(0xffb96a, 2, new V3(0, by, 0)));
+    const lamp = this.addLight(x, by, z, 0xffb371, 7, 17);
     /* gas-lamp wobble */
     this.anims.push(t => { lamp.intensity = 6.4 + Math.sin(t * 4.3 + x) * .5 + Math.sin(t * 9.7 + z) * .3; });
   }
@@ -3795,9 +3817,14 @@ class Game {
 
   buildPlayground() {
     /* ---- crate pyramids ---- */
-    const crateMat = new StdMat({ map: this.crateTexture(), roughness: .92 });
     const crate = (x, y, z, s) => {
-      const mesh = this.m(new BoxGeo(s, s, s), crateMat, x, y, z, { recv: true });
+      /* Centred on its own origin, unlike everything else in the folder,
+         because this one is driven by a physics body and cannon puts a box's
+         origin at its centre. The registry note says so. */
+      const mesh = getModel("crate");
+      mesh.position.set(x, y, z);
+      mesh.scale.setScalar(s / 1.3);          // the model is authored at 1.3m
+      this.scene.add(mesh);
       const body = new CBody({ mass: 1.8 });
       body.addShape(new CBox(new CVec(s / 2, s / 2, s / 2)));
       body.position.set(x, y, z);
@@ -4586,15 +4613,24 @@ class Game {
     return true;
   }
 
-  pine(x, z, s = 1) {
-    const y = heightAt(x, z);
-    const g = new Grp(); g.position.set(x, y, z); g.rotation.y = Math.random() * 6;
-    g.scale.setScalar(s); this.scene.add(g);
+  /* One conifer, built at the origin with its roots on y=0 and nothing about
+     where it is going to stand. That split is what the folder needs: the
+     shape is swappable, the placing is the scene's business, and a .glb
+     dropped in for `pine` inherits all 46 positions for free. */
+  pineModel() {
+    const g = new Grp();
     this.m(new CylGeo(.35, .55, 2.6, 7), this.mat(0x4a3324, { roughness: 1 }), 0, 1.3, 0, { parent: g });
     const greens = [0x1e4d30, 0x256240, 0x2c7048];
     for (let i = 0; i < 3; i++)
       this.m(new ConeGeo(2.6 - i * .7, 2.6, 7), this.foliageMat(greens[i]),
         0, 3 + i * 1.7, 0, { parent: g, recv: true });
+    return g;
+  }
+  pine(x, z, s = 1) {
+    const y = heightAt(x, z);
+    const g = getModel("pine");
+    g.position.set(x, y, z); g.rotation.y = Math.random() * 6;
+    g.scale.setScalar(s); this.scene.add(g);
     this.scyl(.5 * s, 3 * s, x, y + 1.5 * s, z);
     this.addOccluder(x, y + 3.5 * s, z, 2.0 * s);
   }
