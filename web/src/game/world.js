@@ -4517,10 +4517,15 @@ class Game {
 
   ferrisWheel(x, z, ry) {
     const G = getModel("ferris-wheel");
-    G.position.set(x, PARK_Y, z); G.rotation.y = ry;
+    /* On the ground under it, not the island's nominal level. These two were
+       missed when the kiosks and paths were grounded, and out at forty-odd
+       metres the far lobe has dropped enough that the wheel's rims were the
+       tori the audit reported nearly four metres down. */
+    const gy = heightAt(x, z);
+    G.position.set(x, gy, z); G.rotation.y = ry;
     this.scene.add(G); this.outdoorOnly.push(G);
-    this.scyl(3, 6, x, PARK_Y + 3, z);
-    this.addOccluder(x, PARK_Y + 14, z, 7);
+    this.scyl(3, 6, x, gy + 3, z);
+    this.addOccluder(x, gy + 14, z, 7);
     /* Found by name rather than closed over, so this works the same whether
        the wheel came from the folder or from the builder above. A model with
        no `spin` simply stands still instead of throwing. */
@@ -4571,11 +4576,12 @@ class Game {
 
   carousel(x, z) {
     const G = getModel("carousel");
-    G.position.set(x, PARK_Y, z); this.scene.add(G);
+    const gy = heightAt(x, z);
+    G.position.set(x, gy, z); this.scene.add(G);
     this.outdoorOnly.push(G);
-    this.scyl(7.8, 4, x, PARK_Y + 2, z);
-    this.addOccluder(x, PARK_Y + 4, z, 5);
-    this.addLight(x, PARK_Y + 5, z, 0xffc48a, 8, 24);
+    this.scyl(7.8, 4, x, gy + 2, z);
+    this.addOccluder(x, gy + 4, z, 5);
+    this.addLight(x, gy + 5, z, 0xffc48a, 8, 24);
     const spin = G.getObjectByName("spin");
     if (!spin) return;
     const mounts = spin.children.filter(c => c.name.startsWith("mount"));
