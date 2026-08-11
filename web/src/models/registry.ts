@@ -145,18 +145,27 @@ export const MODELS: Record<string, ModelSpec> = {
      and the autumn tree were not, so a forest with one authored tree in it was
      the only forest you could have. Both are ~7m and stand on their roots. */
   oak: {
-    file: "oak.glb", scale: 1, collider: "cylinder",
+    /* Tree Oak 01, 4.35m and centred: scaled to the 5.4m the procedural one
+       stood, which is also what the scene's 0.7-1.5 spread was tuned against. */
+    file: "oak.glb", scale: 1.25, offset: [0, 2.72, 0], collider: "cylinder",
     note: "Broadleaf. Origin at the roots, about 5.5m tall before the scene scales it by 0.7-1.5.",
     fallback: () => new THREE.Group()
   },
   "tree-autumn": {
-    file: "tree-autumn.glb", scale: 1, collider: "cylinder",
+    /* Shade Tree, and the biggest thing in the folder at 7.1m — scaled down
+       rather than left to tower over the pines it is scattered among. */
+    file: "tree-autumn.glb", scale: 0.8, offset: [0, 2.84, 0], collider: "cylinder",
     note: "The turned tree — one in five on the island. Origin at the roots, about 5.5m tall.",
     fallback: () => new THREE.Group()
   },
   planter: {
-    file: "planter.glb", scale: 1, collider: "cylinder",
-    note: "Plaza planter with its topiary. Origin on the paving, 1.7m across, 2.5m tall.",
+    /* Plaza Planter 01 is a flower box, not a tub with a topiary in it: at
+       1.37m wide and 0.73m tall it has the old planter's footprint and none of
+       its height. Scaled to match the footprint exactly; the plaza loses two
+       metres of green mass at each of five points, which is a look, not a
+       mistake — see the note in planter(). */
+    file: "planter.glb", scale: 1.25, offset: [0, 0.46, 0], collider: "cylinder",
+    note: "Plaza planter. Origin on the paving, about 1.7m across.",
     fallback: () => new THREE.Group()
   },
 

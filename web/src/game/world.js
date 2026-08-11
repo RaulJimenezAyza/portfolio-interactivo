@@ -3850,10 +3850,15 @@ class Game {
   }
   planter(x, z) {
     const G = getModel("planter");
+    /* Measured, because the two candidates for this key are 2.5m of tub and
+       topiary and 0.9m of flower box, and a collider sized for the first is an
+       invisible wall round the second. Radius off the footprint, not the
+       leaves: you are meant to be able to brush those. */
+    const s = modelSize(G);
+    const r = Math.max(s.x, s.z) * .46;
     G.position.set(x, 0, z); G.rotation.y = Math.random() * 6; this.scene.add(G);
-    /* the collider is the tub, not the topiary: you can brush the leaves */
-    this.scyl(.88, 1, x, .5, z);
-    this.addOccluder(x, 1.6, z, 1);
+    this.scyl(r, Math.min(1, s.y), x, s.y * .5, z);
+    this.addOccluder(x, s.y * .65, z, r * 1.15);
   }
 
   /* One car of the train, nose toward +Z, origin on the axle line. */
@@ -5238,12 +5243,22 @@ class Game {
     return g;
   }
   oak(x, z, s = 1) {
+    this.broadleaf("oak", x, z, s);
+  }
+
+  /* One tree, wherever the ground is, with the camera's bounding sphere taken
+     off the model rather than off the numbers the primitive version happened
+     to have. A wider crown has to swing the camera wider or it hides the cat
+     from behind; a narrower one should not push it away for nothing. */
+  broadleaf(key, x, z, s) {
     const y = heightAt(x, z);
-    const g = getModel("oak");
+    const g = getModel(key);
+    const size = modelSize(g);
     g.position.set(x, y, z); g.rotation.y = Math.random() * 6;
     g.scale.setScalar(s); this.scene.add(g);
-    this.scyl(.6 * s, 3 * s, x, y + 1.5 * s, z);
-    this.addOccluder(x, y + 3.5 * s, z, 1.9 * s);
+    /* the trunk only — the collider is what you bump into, not what you see */
+    this.scyl(.55 * s, Math.min(3, size.y * .6) * s, x, y + size.y * .3 * s, z);
+    this.addOccluder(x, y + size.y * .68 * s, z, Math.max(size.x, size.z) * .5 * s);
   }
   autumnModel() {
     const g = new Grp();
@@ -5253,12 +5268,7 @@ class Game {
     return g;
   }
   autumnTree(x, z, s = 1) {
-    const y = heightAt(x, z);
-    const g = getModel("tree-autumn");
-    g.position.set(x, y, z); g.rotation.y = Math.random() * 6;
-    g.scale.setScalar(s); this.scene.add(g);
-    this.scyl(.5 * s, 3 * s, x, y + 1.5 * s, z);
-    this.addOccluder(x, y + 3.7 * s, z, 1.8 * s);
+    this.broadleaf("tree-autumn", x, z, s);
   }
 
   /* A palm, built at the origin with its roots on y=0 like every other tree
