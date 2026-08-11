@@ -159,13 +159,14 @@ export const MODELS: Record<string, ModelSpec> = {
     fallback: () => new THREE.Group()
   },
   planter: {
-    /* Plaza Planter 01 is a flower box, not a tub with a topiary in it: at
-       1.37m wide and 0.73m tall it has the old planter's footprint and none of
-       its height. Scaled to match the footprint exactly; the plaza loses two
-       metres of green mass at each of five points, which is a look, not a
-       mistake — see the note in planter(). */
-    file: "planter.glb", scale: 1.25, offset: [0, 0.46, 0], collider: "cylinder",
-    note: "Plaza planter. Origin on the paving, about 1.7m across.",
+    /* Procedural, and the folder has already had its answer here: Plaza
+       Planter 01 is a flower trough 0.9m tall where this is a tub with a
+       topiary on top of it, and five of those around a twelve-metre square
+       is the difference between a planted plaza and a paved one. The key
+       stays — a taller authored planter would be welcome — but it wants a
+       shape with height in it, not a better trough. */
+    file: "planter.glb", scale: 1, collider: "cylinder",
+    note: "Plaza planter with its topiary. Origin on the paving, 1.9m across and 2.5m tall.",
     fallback: () => new THREE.Group()
   },
 

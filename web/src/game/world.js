@@ -7477,59 +7477,117 @@ class Game {
   /* ============ the cat ============ */
 
   /* A mackerel tabby coat, painted once into a canvas.
-     SphereGeometry lays u around the axis and v from pole to pole, and the
-     body sphere's axis is Y — so columns of the image become stripes running
-     over the spine and down the flanks, and rows become the back-to-belly
-     gradient. Which is exactly how a tabby is put together.
-     The stripes are drawn a second time one canvas-width to each side so the
-     u=0/u=1 seam has no visible join. */
-  catFurTexture(isHead) {
-    const W = 512, H = 256;
-    return this.makeCanvas(W, H, g => {
-      const grad = g.createLinearGradient(0, 0, 0, H);
-      grad.addColorStop(0, "#c9702e");        // spine
-      grad.addColorStop(.28, "#e08840");
-      grad.addColorStop(.6, "#e79b58");       // flank
-      grad.addColorStop(.8, "#efc79a");
-      grad.addColorStop(1, "#f5e6cc");        // belly
-      g.fillStyle = grad; g.fillRect(0, 0, W, H);
+     SphereGeometry lays u around the axis and v from pole to pole.
 
-      /* mackerel bars: wavy, tapering, only over the back and flanks */
-      const bars = isHead ? 7 : 13;
+     The head keeps its axis on Y, so columns of the image run over the skull
+     and rows go crown to chin. The body's axis is turned onto Z — nose to
+     tail — which changes everything about how this has to be drawn and is
+     worth the trouble twice over. A mackerel tabby's bars are rings around
+     the barrel, and rings around the barrel are exactly what rows of the
+     image become once the axis runs along the animal. And the two poles,
+     where every column of the image meets at a point, move off the spine
+     (where the chase camera spends its whole life looking) and onto the chest
+     and the rump, where the shoulder mass and the tail cover them.
+
+     Even so, both poles get a band of flat colour: convergence you cannot see
+     is still cheaper than convergence you have hidden. */
+  catFurTexture(kind) {
+    const W = 512, H = 256;
+    const SPINE = "#c9702e", COAT = "#e08840", FLANK = "#e79b58",
+          FADE = "#efc79a", BELLY = "#f5e6cc";
+    const flecks = g => {
+      for (let i = 0; i < 700; i++) {
+        g.fillStyle = Math.random() < .5 ? "rgba(255,220,180,0.16)" : "rgba(120,66,28,0.16)";
+        g.fillRect(Math.random() * W, Math.random() * H, 2 + Math.random() * 3, 1 + Math.random() * 2);
+      }
+    };
+
+    if (kind === "head") return this.makeCanvas(W, H, g => {
+      const grad = g.createLinearGradient(0, 0, 0, H);
+      grad.addColorStop(0, SPINE); grad.addColorStop(.28, COAT);
+      grad.addColorStop(.6, FLANK); grad.addColorStop(.8, FADE); grad.addColorStop(1, BELLY);
+      g.fillStyle = grad; g.fillRect(0, 0, W, H);
+      /* Drawn one canvas-width to each side as well, so the u=0/u=1 seam has
+         no visible join. */
       g.lineCap = "round";
-      for (let i = 0; i < bars; i++) {
-        const x0 = (i + .5) / bars * W;
+      for (let i = 0; i < 7; i++) {
+        const x0 = (i + .5) / 7 * W;
         const lean = (i % 2 ? 1 : -1) * (10 + (i * 37 % 23));
         for (const off of [-W, 0, W]) {
           g.strokeStyle = i % 3 ? "rgba(150,79,30,0.72)" : "rgba(120,60,22,0.62)";
           g.lineWidth = 13 + (i * 17 % 9);
           g.beginPath();
-          g.moveTo(x0 + off, 0);
-          g.quadraticCurveTo(x0 + off + lean, H * .3, x0 + off + lean * .4, H * (isHead ? .5 : .62));
+          g.moveTo(x0 + off, H * .1);
+          g.quadraticCurveTo(x0 + off + lean, H * .32, x0 + off + lean * .4, H * .5);
           g.stroke();
         }
       }
-      /* a darker saddle right along the spine */
-      const sp = g.createLinearGradient(0, 0, 0, H * .22);
-      sp.addColorStop(0, "rgba(110,55,20,0.5)");
+      /* the crown, where the bars would otherwise meet in a rosette between
+         the ears */
+      g.fillStyle = SPINE; g.fillRect(0, 0, W, H * .07);
+      flecks(g);
+    });
+
+    /* ---- the body ----
+       u runs around the barrel: 0.25 is the belly, 0.75 the spine, 0 and 0.5
+       the flanks — which is what makes the seam free, both edges of the image
+       being the same point on the same flank. v runs chest (0) to rump (1). */
+    return this.makeCanvas(W, H, g => {
+      /* around-the-barrel gradient, mirrored either side of the belly */
+      for (let x = 0; x < W; x++) {
+        const u = x / W;
+        /* 0 at the belly, 1 at the spine, going the short way round on both
+           sides so the two halves match and the seam cannot show */
+        const k = Math.abs(((u - .25) + 1.5) % 1 - .5) * 2;
+        const stops = [[0, BELLY], [.3, FADE], [.55, FLANK], [.8, COAT], [1, SPINE]];
+        let c = SPINE;
+        for (let i = 1; i < stops.length; i++) {
+          if (k <= stops[i][0]) {
+            const [a, ca] = stops[i - 1], [b, cb] = stops[i];
+            const t = (k - a) / (b - a);
+            const A = new Col(ca), B = new Col(cb);
+            c = "#" + A.lerp(B, t).getHexString();
+            break;
+          }
+        }
+        g.fillStyle = c; g.fillRect(x, 0, 1, H);
+      }
+
+      /* mackerel bars: rings around the barrel, so rows here. They stop short
+         of the belly on both sides — a tabby's bars break at the flank. */
+      g.lineCap = "round";
+      for (let i = 0; i < 9; i++) {
+        const y0 = H * (.08 + i * .1);
+        const sag = (i % 2 ? 1 : -1) * 7;
+        for (const [x0, x1] of [[W * .40, W * 1.02], [-W * .02, W * .10]]) {
+          g.strokeStyle = i % 3 ? "rgba(150,79,30,0.66)" : "rgba(120,60,22,0.58)";
+          g.lineWidth = 11 + (i * 17 % 8);
+          g.beginPath();
+          g.moveTo(x0, y0);
+          g.quadraticCurveTo((x0 + x1) / 2, y0 + sag, x1, y0);
+          g.stroke();
+        }
+      }
+      /* a darker saddle down the spine, and a soft fur line where the coat
+         meets the belly rather than a hard band */
+      const sp = g.createLinearGradient(W * .68, 0, W * .82, 0);
+      sp.addColorStop(0, "rgba(110,55,20,0)");
+      sp.addColorStop(.5, "rgba(110,55,20,0.4)");
       sp.addColorStop(1, "rgba(110,55,20,0)");
-      g.fillStyle = sp; g.fillRect(0, 0, W, H * .22);
-      /* and a soft edge where the coat meets the belly, so the change of
-         colour is a fur line rather than a hard band */
+      g.fillStyle = sp; g.fillRect(W * .68, 0, W * .14, H);
       g.globalAlpha = .5;
       for (let i = 0; i < 220; i++) {
-        const x = Math.random() * W, y = H * (.66 + Math.random() * .16);
+        const y = Math.random() * H, side = Math.random() < .5 ? W * .40 : W * .10;
+        const x = side + (Math.random() - .5) * 26;
         g.strokeStyle = "rgba(226,150,90,0.7)";
         g.lineWidth = 2.5;
-        g.beginPath(); g.moveTo(x, y); g.lineTo(x + (Math.random() - .5) * 6, y - 9 - Math.random() * 10); g.stroke();
-      }
-      /* flecks, so a large flat area is never truly flat */
-      for (let i = 0; i < 700; i++) {
-        const y = Math.random() * H;
-        g.fillStyle = Math.random() < .5 ? "rgba(255,220,180,0.16)" : "rgba(120,66,28,0.16)";
-        g.fillRect(Math.random() * W, y, 2 + Math.random() * 3, 1 + Math.random() * 2);
+        g.beginPath(); g.moveTo(x, y); g.lineTo(x + (side > W * .2 ? -9 : 9) - 0, y + (Math.random() - .5) * 8); g.stroke();
       }
       g.globalAlpha = 1;
+      /* chest and rump, the two poles */
+      g.fillStyle = BELLY; g.fillRect(0, 0, W, H * .04);
+      g.fillStyle = COAT; g.fillRect(0, H * .96, W, H * .04);
+      flecks(g);
     });
   }
 
@@ -7575,29 +7633,41 @@ class Game {
        glued to the back: a mackerel tabby wants stripes that wrap around the
        barrel and fade into a cream belly, which is a two-minute canvas and no
        extra geometry at all. */
-    const fur = new StdMat({ map: this.catFurTexture(false), roughness: .82 });
-    const furHead = new StdMat({ map: this.catFurTexture(true), roughness: .82 });
-    const orange = this.mat(0xe08840, { roughness: .8 });
-    const darkOr = this.mat(0xb5652a, { roughness: .85 });
+    const fur = new StdMat({ map: this.catFurTexture("body"), roughness: .82 });
+    const furHead = new StdMat({ map: this.catFurTexture("head"), roughness: .82 });
+    /* the coat's own mid-tone and the shade under it, for the parts the map
+       cannot cover: the legs and the tail rings */
+    const orange = this.mat(0xdd8a45, { roughness: .8 });
+    const darkOr = this.mat(0xc4732f, { roughness: .85 });
     const cream = this.mat(0xf5e6cc, { roughness: .85 });
     const pinkM = this.mat(0xd98a80, { roughness: .7 });
 
-    /* body */
-    const bodyMesh = this.m(new SphGeo(.62, 22, 16), fur, 0, .1, 0, { parent: inner });
-    bodyMesh.scale.set(1, .82, 1.45);
+    /* ---- body ----
+       Turned onto its side so the sphere's axis runs nose to tail: the coat
+       texture needs it (see catFurTexture) and so does the silhouette — a
+       barrel is longer than it is wide and the old one was a ball stretched
+       along Z, which read as a loaf from behind. Rotating about X sends local
+       +Y to +Z, so the scale that lengthens the animal is the local y one. */
+    const bodyMesh = this.m(new SphGeo(.58, 24, 18), fur, 0, .12, -.02, { parent: inner, rx: Math.PI / 2 });
+    bodyMesh.scale.set(.98, 1.36, .82);
     /* shoulders, so the neck is not a ball balanced on an egg */
-    const shoulders = this.m(new SphGeo(.44, 14, 11), fur, 0, .18, .48, { parent: inner });
-    shoulders.scale.set(1.02, .92, .8);
-    const chest = this.m(new SphGeo(.34, 14, 10), cream, 0, -.12, .62, { parent: inner, cast: false });
-    chest.scale.set(.8, .78, .7);
-    /* haunches */
+    const shoulders = this.m(new SphGeo(.4, 16, 12), fur, 0, .2, .4, { parent: inner, rx: Math.PI / 2 });
+    shoulders.scale.set(1.02, .9, .88);
+    const chest = this.m(new SphGeo(.33, 14, 10), cream, 0, -.04, .6, { parent: inner, cast: false });
+    chest.scale.set(.82, .8, .72);
+    /* Haunches, and they are the shape of the animal from behind: a cat's
+       thigh is a rounded mass that stands proud of the barrel and carries the
+       leg under it, not a bump on a flank. */
     for (const sx of [-1, 1]) {
-      const hip = this.m(new SphGeo(.3, 12, 9), fur, sx * .22, -.06, -.5, { parent: inner });
-      hip.scale.set(.75, .95, 1.05);
+      const hip = this.m(new SphGeo(.29, 14, 10), fur, sx * .25, .04, -.32, { parent: inner });
+      hip.scale.set(.82, 1, 1.1);
     }
+    /* neck: short and thick, or the head looks stuck on */
+    const neck = this.m(new SphGeo(.27, 12, 9), fur, 0, .46, .62, { parent: inner, cast: false });
+    neck.scale.set(.9, .95, 1.05);
 
     /* head */
-    const head = new Grp(); head.position.set(0, .62, .78); inner.add(head);
+    const head = new Grp(); head.position.set(0, .66, .78); inner.add(head);
     head.name = "head";
     const skull = this.m(new SphGeo(.44, 20, 15), furHead, 0, 0, 0, { parent: head });
     skull.scale.set(1, .92, .95);
@@ -7643,32 +7713,63 @@ class Game {
       const w = this.m(new BoxGeo(.46, .012, .012), whiskM, sx * .43, -.1 + i * .05, .42, { parent: head, cast: false });
       w.rotation.y = sx * .38; w.rotation.z = (i - 1) * .14 * sx;
     }
-    /* collar + bell */
-    const collar = this.m(new TorusGeo(.3, .055, 8, 18), this.mat(0xd6543c, { roughness: .5 }), 0, .33, .69, { parent: inner, cast: false });
-    collar.rotation.x = Math.PI / 2 - .45;      // hugs the neck instead of hanging off it
-    this.m(new SphGeo(.085, 10, 8), new StdMat({ color: 0xffd76a, metalness: .8, roughness: .25, emissive: new Col(0x806018), emissiveIntensity: .4 }), 0, .19, .95, { parent: inner, cast: false });
+    /* Collar and bell, on the neck rather than in front of it. Both used to
+       sit forward of the chest with daylight behind them — the bell in
+       particular hung in mid-air a hand's width off the fur. */
+    const collar = this.m(new TorusGeo(.28, .05, 8, 18), this.mat(0xd6543c, { roughness: .5 }), 0, .42, .61, { parent: inner, cast: false });
+    collar.rotation.x = Math.PI / 2 - .38;      // hugs the neck instead of hanging off it
+    this.m(new SphGeo(.08, 10, 8), new StdMat({ color: 0xffd76a, metalness: .8, roughness: .25, emissive: new Col(0x806018), emissiveIntensity: .4 }), 0, .25, .74, { parent: inner, cast: false });
 
-    /* legs: a tapered upper, a narrower ankle and a paw with toes */
+    /* ---- legs ----
+       One limb, not two cylinders with a step between them. The old leg was a
+       fur tube, a differently-coloured tube starting where the first ended,
+       and a cream ball under that: at any angle where the join caught the
+       light it read as a boot on a stick. This is a shoulder that merges into
+       the body, a taper down to a narrow ankle, and a paw at the bottom of
+       it — each piece overlapping the one above so there is no seam to find.
+
+       The paw lands at y = -0.80, which is where the ground is: the physics
+       body holds the origin exactly 0.8m above it. The old one stopped at
+       -0.89 and the cat walked with its feet through the floor. */
     const LEG_NAMES = ["legFL", "legFR", "legBL", "legBR"];
-    [[-.32, .5], [.32, .5], [-.32, -.48], [.32, -.48]].forEach(([lx, lz], i) => {
-      const pivot = new Grp(); pivot.position.set(lx, -.28, lz); inner.add(pivot);
-      this.m(new CylGeo(.145, .105, .3, 9), fur, 0, -.13, 0, { parent: pivot });
-      this.m(new CylGeo(.095, .105, .26, 9), i < 2 ? orange : darkOr, 0, -.36, 0, { parent: pivot });
-      const paw = this.m(new SphGeo(.135, 10, 8), cream, 0, -.5, .04, { parent: pivot, cast: false });
-      paw.scale.set(1, .8, 1.15);
-      for (let k = 0; k < 3; k++)
-        this.m(new SphGeo(.05, 6, 5), cream, (k - 1) * .075, -.52, .15, { parent: pivot, cast: false });
+    [[-.29, .46], [.29, .46], [-.31, -.42], [.31, -.42]].forEach(([lx, lz], i) => {
+      const pivot = new Grp(); pivot.position.set(lx, 0, lz); inner.add(pivot);
+      const back = i >= 2;
+      /* The top of the limb, sunk into the body so the two are one shape. It
+         is the only part of the leg that wears the coat texture: the map is
+         laid out for a sphere, and a cylinder takes the belly-to-spine
+         gradient as a set of vertical bands, which on a leg reads as a
+         bandage. Everything below is the coat's own colour. */
+      const top = this.m(new SphGeo(.17, 12, 9), fur, 0, -.02, 0, { parent: pivot, cast: false });
+      top.scale.set(.95, 1.15, 1);
+      this.m(new CylGeo(.145, .1, .44, 10), orange, 0, -.3, 0, { parent: pivot });
+      /* the ankle, a shade deeper — a dark boot is what this used to be and
+         what it should not be */
+      this.m(new CylGeo(.1, .085, .26, 9), back ? darkOr : orange, 0, -.62, 0, { parent: pivot });
+      const paw = this.m(new SphGeo(.125, 12, 9), cream, 0, -.7, .03, { parent: pivot, cast: false });
+      paw.scale.set(1.02, .82, 1.28);
+      /* toes: shallow ridges on the front of the paw, not three loose beads */
+      for (let k = 0; k < 3; k++) {
+        const toe = this.m(new SphGeo(.05, 7, 5), cream, (k - 1) * .062, -.72, .13, { parent: pivot, cast: false });
+        toe.scale.set(1, .8, 1.15);
+      }
       pivot.name = LEG_NAMES[i];
     });
 
-    /* tail: a tapering chain, ringed like the coat */
+    /* ---- tail ----
+       Six segments rather than five, tapering from a base as thick as the
+       ankle to a cream tip, and each one already angled a little so the rest
+       pose is a curve. A chain of straight segments animated by a sine reads
+       as a rod being waggled; the curve is what makes it a tail. */
     let parent = inner;
-    for (let i = 0; i < 5; i++) {
+    for (let i = 0; i < 6; i++) {
       const seg = new Grp();
-      seg.position.set(0, i === 0 ? .25 : 0, i === 0 ? -.85 : -.21);
-      const r = .115 - i * .012;
-      this.m(new CylGeo(r, r * .9, .2, 8), i % 2 ? darkOr : orange, 0, 0, -.1, { parent: seg, cast: false, rx: Math.PI / 2 });
-      this.m(new SphGeo(r * .95, 8, 6), i === 4 ? cream : (i % 2 ? darkOr : orange), 0, 0, -.2, { parent: seg, cast: false });
+      /* the base sits high on the rump, where a tail comes out of a cat, not
+         low between the hind legs */
+      seg.position.set(0, i === 0 ? .32 : 0, i === 0 ? -.62 : -.19);
+      const r = .125 - i * .014;
+      this.m(new CylGeo(r, r * .88, .2, 9), i % 2 ? darkOr : orange, 0, 0, -.1, { parent: seg, cast: false, rx: Math.PI / 2 });
+      this.m(new SphGeo(r * .93, 9, 7), i === 5 ? cream : (i % 2 ? darkOr : orange), 0, 0, -.2, { parent: seg, cast: false });
       seg.name = "tail" + i;
       parent.add(seg);
       parent = seg;
@@ -7960,7 +8061,12 @@ class Game {
     /* tail wave (stronger curl when sitting) */
     for (let i = 0; i < this.tailSegs.length; i++) {
       const seg = this.tailSegs[i];
-      seg.rotation.x = (i === 0 ? -.7 : 0) + Math.sin(t * 2.4 + i * .8) * .18 + this.sitF * .25;
+      /* The rest pose is a curve, not a straight rod, and it goes UP.
+         Segments run along their own -Z, and a positive rotation about X is
+         what lifts that: the old -0.7 pointed the tail at the floor, which
+         from the chase camera — the view the game is played in — put a fat
+         sausage across the middle of the screen. */
+      seg.rotation.x = (i === 0 ? .62 : .12) + Math.sin(t * 2.4 + i * .8) * .16 + this.sitF * .3;
       seg.rotation.y = Math.sin(t * 3 + i * .9 + this.speedSmooth) * (.25 + this.sitF * .2);
     }
     /* Head idle motion + ear twitch, each guarded. A cat that came out of the

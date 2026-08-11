@@ -20,7 +20,6 @@ project's own.
 | `mossy-boulder.glb`, `sandstone-boulder.glb` | `Mossy Boulder`, `Sandstone Boulder`, ThreeJS Assets | same |
 | `oak.glb` | `Tree Oak 01`, ThreeJS Assets | same |
 | `tree-autumn.glb` | `Shade Tree`, ThreeJS Assets | same |
-| `planter.glb` | `Plaza Planter 01`, ThreeJS Assets | same |
 
 The ThreeJS Assets models are Draco compressed, which is why `GLTFLoader` here
 is given a `DRACOLoader` and why `scripts/gen-manifest.mjs` copies three's
