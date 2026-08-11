@@ -64,7 +64,23 @@ This runs at 60 fps with a few thousand draw calls and no LODs. A model with
 the island put together. Aim for the low thousands, flat-shaded, no normal
 maps.
 
+## Compression
+
+A `.glb` may arrive Draco compressed; the loader is set up for it and
+`npm run models` copies three's decoder into `public/draco` so it can. That
+folder is generated — do not commit it, and do not hand-place a decoder in it
+that came from a different version of three than the one in `package.json`.
+
+A compressed model with no decoder is the one failure here that is silent:
+`GLTFLoader` rejects the parse, `loadModel` falls back, and you get the
+procedural version with no missing file to go looking for. `npm run verify`
+checks for the decoder whenever a file in this folder needs one.
+
 ## Current contents
 
-Everything is procedural right now; this folder is empty apart from this file.
-`npm run models` prints what it finds.
+The fairground and the conifer come from Kenney's kits; the obelisk, the lamp,
+the palms and the loose rock come from ThreeJS Assets. Everything else is still
+built in code — the cat, the statue, the fountain, the wheel, the carousel and
+the crate, which has the owner's initials stencilled on it and is staying that
+way. `npm run models` prints what it finds; `CREDITS.md` says where each file
+came from.

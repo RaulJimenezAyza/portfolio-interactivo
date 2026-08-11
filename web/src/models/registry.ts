@@ -64,8 +64,14 @@ export const MODELS: Record<string, ModelSpec> = {
     fallback: () => new THREE.Group()
   },
   stele: {
-    file: "stele.glb",
-    scale: 1,
+    /* threejsassets' Obelisk, 6.56 m, centred: scaled to the 2.8 m the plaza
+       was laid out for and lifted half of that. Eight of these stand around a
+       twelve-metre square, so the width matters as much as the height — at
+       this scale it is 0.86 m across, which is the girth the procedural one
+       had. No `panel` child; stele() measures the face instead. */
+    file: "obelisk.glb",
+    scale: 0.427,
+    offset: [0, 1.4, 0],
     collider: "cylinder",
     note: "One temple marker. Origin at the ground, face (the panel side) toward +Z, 2.8m tall.",
     fallback: () => new THREE.Group()
@@ -105,13 +111,53 @@ export const MODELS: Record<string, ModelSpec> = {
     note: "Conifer. Origin at the roots, about 7.7m tall once scaled.",
     fallback: () => new THREE.Group()
   },
+  /* ---- the shore and the scatter, from threejsassets (free tier) ----
+     Every one of these arrives centred on its own bounding box rather than
+     standing on its base, which is why they all carry an offset of half their
+     height. The folder's README says origin on the ground; the models say
+     otherwise; the registry is where that argument gets settled. */
+  palm: {
+    file: "coconut-palm.glb", scale: 1, offset: [0, 2.87, 0], collider: "cylinder",
+    note: "Coconut palm for the beach. Origin at the roots, 5.7m tall, crown clear of a walking cat.",
+    fallback: () => new THREE.Group()
+  },
+  "palm-royal": {
+    file: "royal-palm.glb", scale: 1, offset: [0, 4.01, 0], collider: "cylinder",
+    note: "The tall palm, 8m, so the beach line is not one repeated silhouette. Origin at the roots.",
+    fallback: () => new THREE.Group()
+  },
+  boulder: {
+    file: "mossy-boulder.glb", scale: 1, offset: [0, 0.41, 0], collider: "none",
+    note: "Loose rock inland, 1.66m across. Origin on the ground; the scene scales each one by 0.4-1.4.",
+    fallback: () => new THREE.Group()
+  },
+  "boulder-sand": {
+    /* On the beach with the palms, not on the islet: pale sandstone among the
+       grey-purple crag reads as rubble someone carted in, and on the sand it
+       reads as the shore it weathered out of. */
+    file: "sandstone-boulder.glb", scale: 1, offset: [0, 0.53, 0], collider: "none",
+    note: "Pale rock on the shoreline, 1.88m across. Origin on the ground.",
+    fallback: () => new THREE.Group()
+  },
+
   crate: {
+    /* Deliberately still procedural. threejsassets' Crate 01 loads and lands
+       correctly at scale 2 — it was tried — but the crate is not scenery: it
+       carries a stencil reading RJA / FRAGIL, which is the joke and the
+       signature, and an authored crate is a dark box with blue brackets and
+       nobody's initials on it. The one model in the folder whose origin
+       belongs at its centre rather than on the ground, because a cannon box
+       body is centred and the mesh is synced straight to it. */
     file: "crate.glb", scale: 1, collider: "box",
     note: "Pushable crate. Origin at its centre, 1.3m cube.",
     fallback: () => new THREE.Group()
   },
   lamp: {
-    file: "lamp.glb", scale: 1, collider: "none",
+    /* Deco Street Lamp, 4.2 m and centred on its own bounding box, so it is
+       scaled down to the 3.9 m the plaza was lit for and lifted half its own
+       height. It brings no child named `bulb`; lampPost() measures the model
+       and hangs the halo near the top instead — see the note there. */
+    file: "deco-street-lamp.glb", scale: 0.93, offset: [0, 1.95, 0], collider: "none",
     note: "Plaza lamp post. Origin at the ground, 3.9m tall. A child named 'bulb' gets the emissive material and the light.",
     fallback: () => new THREE.Group()
   },

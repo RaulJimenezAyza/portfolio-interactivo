@@ -14,6 +14,19 @@ project's own.
 | `coaster-support.glb` | Coaster Kit (`support-small`) | CC0 1.0 |
 | `park-queue.glb`, `park-path.glb` | Coaster Kit (`queue-straight`, `path-straight`) | CC0 1.0 |
 | `Textures/colormap.png` | Coaster Kit | CC0 1.0 |
+| `obelisk.glb` | `Obelisk` from [ThreeJS Assets](https://threejsassets.com/assets/free) | free tier: commercial use, no attribution required, no reselling the files |
+| `deco-street-lamp.glb` | `Deco Street Lamp`, ThreeJS Assets | same |
+| `coconut-palm.glb`, `royal-palm.glb` | `Coconut Palm`, `Royal Palm`, ThreeJS Assets | same |
+| `mossy-boulder.glb`, `sandstone-boulder.glb` | `Mossy Boulder`, `Sandstone Boulder`, ThreeJS Assets | same |
+
+The ThreeJS Assets models are Draco compressed, which is why `GLTFLoader` here
+is given a `DRACOLoader` and why `scripts/gen-manifest.mjs` copies three's
+decoder into `public/draco`. Without it they do not fail loudly — the parse is
+rejected, the procedural model turns up, and the world looks right minus one
+thing. Their free licence permits commercial use and asks for no credit; it
+forbids reselling the files. They are also authored centred on their own
+bounding box rather than standing on their base, so each one carries an
+`offset` in the registry — see the notes there.
 
 `Textures/colormap.png` is not optional. The Coaster Kit's GLBs reference it
 as a relative path rather than embedding it, so without it every model from

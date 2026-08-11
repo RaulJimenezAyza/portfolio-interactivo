@@ -3,4 +3,5 @@ node_modules/
 out/
 next-env.d.ts
 src/models/manifest.generated.ts
+public/draco/
 .next-dev/

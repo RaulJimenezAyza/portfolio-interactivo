@@ -2553,6 +2553,10 @@ class Game {
         { parent: new Grp() }).parent);
     registerFallback("park-queue", () => new Grp());
     registerFallback("park-path", () => new Grp());
+    registerFallback("boulder", () => this.rockModel(0x53506a));
+    registerFallback("boulder-sand", () => this.rockModel(0x9a8a6a));
+    registerFallback("palm", () => this.palmModel(5.7));
+    registerFallback("palm-royal", () => this.palmModel(8));
     registerFallback("fountain", () => this.fountainModel(
       this.plazaMats.stone, this.plazaMats.stoneD, this.plazaMats.stonePale, this.plazaMats.bronze));
 
@@ -3768,12 +3772,20 @@ class Game {
 
   stele(x, z, ry, color, name) {
     const G = getModel("stele");
+    /* measured before it is turned: after rotation.y the box is axis-aligned
+       to the world and its depth is no longer the stone's depth */
+    const size = modelSize(G);
     G.position.set(x, 0, z); G.rotation.y = ry; this.scene.add(G);
     /* everything from here down is this particular temple's, not the stone's,
        and rides on wherever the model put its panel */
+    /* An authored stone arrives as one unnamed mesh, so the face has to be
+       found by measuring rather than by asking: a bit above half height, and
+       proud of the front by half the depth. On a tapered shaft that leaves
+       the plate a couple of centimetres off the stone at the top edge, which
+       reads as an inlay and not as a mistake. */
     const panel = G.getObjectByName("panel");
-    const py = panel ? panel.position.y : 1.5;
-    const pz = panel ? panel.position.z : .36;
+    const py = panel ? panel.position.y : size.y * .53;
+    const pz = panel ? panel.position.z : size.z * .5 - .04;
 
     const c = new Col(color);
     this.m(new BoxGeo(.44, .44, .07), new StdMat({ color: c, emissive: c,
@@ -3879,9 +3891,15 @@ class Game {
     const g = getModel("lamp");
     g.position.set(x, 0, z); this.scene.add(g);
     /* the glow follows the bulb wherever the model puts it, so a taller lamp
-       does not leave its halo hanging at the old height */
+       does not leave its halo hanging at the old height.
+       Authored models mostly do not name anything — the one in the folder is
+       a single mesh called `deco_street_lamp` — so failing to find the child
+       measures the model and lights it near the top rather than falling back
+       to a number that was only ever right for the procedural post. The lit
+       glass is then a painted vertex like the rest of it: the halo and the
+       point light are what sell it, and both land where the lamp head is. */
     const bulb = g.getObjectByName("bulb");
-    const by = bulb ? bulb.position.y : 3.5;
+    const by = bulb ? bulb.position.y : modelSize(g).y * .9;
     g.add(this.glowSprite(0xffb96a, 2, new V3(0, by, 0)));
     const lamp = this.addLight(x, by, z, 0xffb371, 7, 17);
     /* gas-lamp wobble */
@@ -5133,14 +5151,30 @@ class Game {
 
   /* ============ nature: trees, rocks, flowers ============ */
   isClearOf(x, z, margin = 6) {
+    const d = Math.hypot(x, z);
+    if (d > coastRadius(Math.atan2(z, x)) - 7) return false;                // in the sea
+    if (heightAt(x, z) < .5) return false;                                  // on the sand
+    return this.isClearOfBuilt(x, z, margin);
+  }
+
+  /* The same obstacles, on the ground isClearOf exists to refuse.
+     That test keeps the forest inland: it throws out the last seven metres of
+     shore and everything below half a metre, which is the beach exactly. The
+     palms want the beach — and still want none of the rest of it: no road, no
+     temple, no coaster, no bridgehead. So the two tests share the obstacle
+     list and differ only on which ground they accept. */
+  isClearOfShore(x, z, margin = 3) {
+    if (heightAt(x, z) < .15) return false;                                 // in the surf
+    return this.isClearOfBuilt(x, z, margin);
+  }
+
+  isClearOfBuilt(x, z, margin) {
     /* nothing grows through the coaster */
     {
       const d = Math.hypot(x - COASTER.x, z - COASTER.z);
       if (d > 12 && d < 23) return false;
     }
     const d = Math.hypot(x, z);
-    if (d > coastRadius(Math.atan2(z, x)) - 7) return false;                // in the sea
-    if (heightAt(x, z) < .5) return false;                                  // on the sand
     if (d < 15 + margin) return false;                                      // plaza
     if (Math.hypot(x - this.pondPos.x, z - this.pondPos.z) < this.pondPos.r + 2) return false;
     if (Math.hypot(x - 15, z - 5) < 14) return false;                        // playground
@@ -5203,6 +5237,60 @@ class Game {
     this.addOccluder(x, y + 3.7 * s, z, 1.8 * s);
   }
 
+  /* A palm, built at the origin with its roots on y=0 like every other tree
+     here, so the beach loop does not care whether it got this or the file.
+     The fronds go through foliageMat for the same reason the topiary does:
+     one thing standing dead still in a scene where everything sways is the
+     thing your eye goes to. */
+  palmModel(h) {
+    const g = new Grp();
+    const bark = this.mat(0x8a6a44, { roughness: 1, flatShading: true });
+    /* a slight lean, put in the trunk rather than in the group, so the crown
+       comes with it and the scene can still rotate the tree about Y */
+    const lean = .09;
+    const segs = 5;
+    for (let i = 0; i < segs; i++) {
+      const t = i / segs, r = .22 - t * .09;
+      this.m(new CylGeo(r - .02, r, h / segs + .04, 7), bark,
+        Math.sin(lean) * (h * t * t) * .5, h * (t + .5 / segs), 0, { parent: g, rz: -lean * t, recv: true });
+    }
+    const tipX = Math.sin(lean) * h * .5;
+    const crown = new Grp(); crown.position.set(tipX, h, 0); g.add(crown);
+    const frond = this.foliageMat(0x3f7d46), frondD = this.foliageMat(0x2f6238);
+    for (let i = 0; i < 7; i++) {
+      const a = i / 7 * 6.283 + .3;
+      this.m(new ConeGeo(.34, h * .52, 4), i % 2 ? frond : frondD,
+        Math.cos(a) * h * .17, -h * .04, Math.sin(a) * h * .17,
+        { parent: crown, rx: Math.cos(a + Math.PI / 2) * 1.15, rz: Math.cos(a) * -1.15, recv: true });
+    }
+    /* coconuts, or the crown is a green star on a stick */
+    for (let i = 0; i < 3; i++) {
+      const a = i * 2.1;
+      this.m(new SphGeo(.13, 7, 6), this.mat(0x6b4a2c, { roughness: .9 }),
+        Math.cos(a) * .22, -.16, Math.sin(a) * .22, { parent: crown, cast: false });
+    }
+    return g;
+  }
+
+  /* One loose rock. Two keys rather than one because the damp stone inland and
+     the dry rock round the crag are not the same colour, and forty copies of a
+     single boulder is the thing you notice about a scatter. The caller passes
+     the ground height it already knows and the rotation it wants, so the islet
+     can stay deterministic (hash2) while the island stays random. */
+  rockModel(color) {
+    if (!this._rockMats) this._rockMats = {};
+    const m = this._rockMats[color] ||= this.mat(color, { flatShading: true, roughness: 1 });
+    const g = new Grp();
+    this.m(new DodGeo(.83, 0), m, 0, .35, 0, { parent: g, recv: true });
+    return g;
+  }
+  boulder(key, x, y, z, s, ry) {
+    const g = getModel(key);
+    g.position.set(x, y, z); g.rotation.y = ry; g.scale.setScalar(s);
+    this.scene.add(g);
+    return g;
+  }
+
   buildNature() {
     const nTrees = IS_TOUCH ? 26 : 46;
     let placed = 0, guard = 0;
@@ -5217,13 +5305,68 @@ class Game {
       else this.autumnTree(x, z, s);
       placed++;
     }
-    /* rocks */
-    for (let i = 0; i < (IS_TOUCH ? 10 : 20); i++) {
+    /* Rocks. Tried rather than counted, like the trees: about a third of the
+       island is road, plaza or temple ground, so a plain loop of twenty threw
+       most of them away and the number that survived swung between one and
+       seven from load to load. */
+    let rocks = 0, rguard = 0;
+    while (rocks < (IS_TOUCH ? 10 : 20) && rguard++ < 400) {
       const a = Math.random() * 6.28, r = 25 + Math.random() * 88;
       const x = Math.cos(a) * r, z = Math.sin(a) * r;
       if (!this.isClearOf(x, z, 2)) continue;
-      this.m(new DodGeo(.5 + Math.random() * 1.3, 0), this.mat(0x53506a, { flatShading: true, roughness: 1 }),
-        x, heightAt(x, z) + .35, z, { recv: true, ry: Math.random() * 6 });
+      this.boulder("boulder", x, heightAt(x, z), z, .45 + Math.random() * .95, Math.random() * 6);
+      rocks++;
+    }
+
+    /* ---- palms along the beach ----
+       The island had conifers, oaks and one autumn tree, which is a temperate
+       forest on a lagoon with a fairground on it. These go on the sand only —
+       between the last of the hills and the waterline — so the treeline
+       changes as you walk down to the shore instead of the same three shapes
+       carrying on to the sea. Two heights, because a row of one palm repeated
+       is a fence. */
+    /* Tried rather than counted, like the trees above: the beach is crossed by
+       two roads, a boardwalk and a bridgehead, and a plain loop of eighteen
+       spent most of them landing in one and placed four palms. */
+    let palms = 0, pguard = 0;
+    while (palms < (IS_TOUCH ? 9 : 18) && pguard++ < 400) {
+      const a = Math.random() * 6.28;
+      const coast = coastRadius(a);
+      /* On the sand, which the terrain colouring blends in from .88 of the
+         coast radius and turns wet at .975 — so this band is beach on both
+         counts, and a palm never stands in the surf. */
+      const r = coast * (.93 + Math.random() * .045);
+      const x = Math.cos(a) * r, z = Math.sin(a) * r;
+      if (!this.isClearOfShore(x, z, 3)) continue;
+      /* the bridgehead and the boardwalk are the two places the player is
+         funnelled through; a palm in either is a palm you walk into */
+      if (Math.hypot(x - BRIDGE_A.x, z - BRIDGE_A.z) < 12) continue;
+      if (Math.hypot(x - PARK_A.x, z - PARK_A.z) < 12) continue;
+      const tall = Math.random() < .35;
+      const y = heightAt(x, z);
+      const g = getModel(tall ? "palm-royal" : "palm");
+      const s = .8 + Math.random() * .35;
+      g.position.set(x, y, z); g.rotation.y = Math.random() * 6;
+      g.scale.setScalar(s); this.scene.add(g);
+      this.scyl(.4 * s, (tall ? 6 : 4.4) * s, x, y + 2 * s, z);
+      /* the crown only: the trunk is thin enough to see the cat past, and a
+         sphere round the whole tree would swing the camera in on the beach */
+      this.addOccluder(x, y + (tall ? 7 : 5) * s, z, 2.2 * s);
+      palms++;
+    }
+
+    /* and pale rock on the sand with them, low enough to walk round rather
+       than into, so the shoreline is not palm trunks on bare ground */
+    let shoreRocks = 0, sguard = 0;
+    while (shoreRocks < (IS_TOUCH ? 5 : 11) && sguard++ < 300) {
+      const a = Math.random() * 6.28;
+      const r = coastRadius(a) * (.93 + Math.random() * .055);
+      const x = Math.cos(a) * r, z = Math.sin(a) * r;
+      if (!this.isClearOfShore(x, z, 1)) continue;
+      if (Math.hypot(x - BRIDGE_A.x, z - BRIDGE_A.z) < 10) continue;
+      if (Math.hypot(x - PARK_A.x, z - PARK_A.z) < 10) continue;
+      this.boulder("boulder-sand", x, heightAt(x, z), z, .4 + Math.random() * .7, Math.random() * 6);
+      shoreRocks++;
     }
     /* flowers + grass tufts */
     const petals = [0xf2a2c4, 0xffd76a, 0xf07a6a, 0x8fb0ff];
@@ -5428,6 +5571,12 @@ class Game {
       if (bridgeSide(x, z, bridgeT(x, z)) < 5) continue;
       this.pine(x, z, .7 + hash2(i, 13) * .5);
     }
+    /* Left as they were, and tumbled on all three axes. An authored rock was
+       tried here and the islet is the one place on the map where it does not
+       work: the crag is grey-purple terrain, the portal's own boulders are cut
+       from the same colour, and a pale sandstone lump among them reads as
+       rubble carted in from somewhere else. The sandstone went to the beach
+       instead, where it is the colour of the ground it sits on. */
     const crag = this.mat(0x565266, { roughness: 1, flatShading: true });
     for (let i = 0; i < 12; i++) {
       const a = hash2(i, 21) * 6.283, r = 6 + hash2(i, 27) * (ISLET_R - 8);

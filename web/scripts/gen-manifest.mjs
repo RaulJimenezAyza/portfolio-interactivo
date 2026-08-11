@@ -8,7 +8,7 @@
  * source. Drop a .glb in the folder, rebuild, and the registry picks it up
  * with no code edit — which is the whole point of the folder.
  */
-import { readdirSync, writeFileSync, mkdirSync, existsSync } from "node:fs";
+import { readdirSync, writeFileSync, copyFileSync, mkdirSync, existsSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -28,3 +28,28 @@ export const MODEL_FILES: readonly string[] = ${JSON.stringify(files, null, 2)};
 `, "utf8");
 
 console.log(`models: ${files.length ? files.join(", ") : "(none — all procedural)"}`);
+
+/* ---- the Draco decoder ----
+ *
+ * A compressed .glb needs a decoder next to it, and three ships one it does
+ * not serve: it lives in node_modules, which is not on the web. Copied here
+ * rather than committed, for the same reason out/ is not committed — a binary
+ * in version control goes stale against the three it was taken from, and this
+ * one has to match `three/examples/jsm/loaders/DRACOLoader.js` exactly.
+ *
+ * The wasm build only. The 512 KB asm.js fallback exists for browsers without
+ * WebAssembly, and this game is WebGL2 with a physics engine: anything that
+ * cannot run wasm was never going to get a frame out of it. */
+const dracoSrc = join(here, "..", "node_modules", "three", "examples", "jsm", "libs", "draco", "gltf");
+const dracoOut = join(here, "..", "public", "draco");
+const needsDraco = files.length > 0;
+if (needsDraco && existsSync(dracoSrc)) {
+  mkdirSync(dracoOut, { recursive: true });
+  for (const f of ["draco_wasm_wrapper.js", "draco_decoder.wasm"])
+    copyFileSync(join(dracoSrc, f), join(dracoOut, f));
+  console.log("draco:  decoder copied to public/draco");
+} else if (needsDraco) {
+  /* Loud, because the symptom is silent: GLTFLoader fails the parse, load.ts
+     falls back, and you get the procedural world with no missing file to find. */
+  console.warn("draco:  WARNING — three's decoder is not in node_modules; compressed models will not load");
+}

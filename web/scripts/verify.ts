@@ -15,8 +15,73 @@
  *   npm run verify
  */
 import * as THREE from "three";
+import { readFileSync, existsSync } from "node:fs";
+import { join, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
 import { buildCatStatue } from "../src/game/props/catStatue";
 import { MODELS } from "../src/models/registry";
+
+const here = dirname(fileURLToPath(import.meta.url));
+
+/* ---- just enough of the glTF container to measure a model ----
+   A .glb is a 12-byte header and then length-prefixed chunks; the first is
+   the JSON that describes the scene. Reading it is twenty lines and needs no
+   decoder, which is the whole reason this is here rather than a GLTFLoader. */
+type Gltf = {
+  scene?: number;
+  scenes?: { nodes?: number[] }[];
+  nodes: { name?: string; mesh?: number; children?: number[]; translation?: number[]; scale?: number[] }[];
+  meshes?: { primitives: { attributes?: Record<string, number> }[] }[];
+  accessors?: { min?: number[]; max?: number[] }[];
+  extensionsRequired?: string[];
+};
+
+function glbJson(path: string): Gltf {
+  const buf = readFileSync(path);
+  if (buf.readUInt32LE(0) !== 0x46546c67) throw new Error(`${path} is not a .glb`);
+  let off = 12;
+  while (off < buf.length) {
+    const len = buf.readUInt32LE(off), type = buf.readUInt32LE(off + 4);
+    if (type === 0x4e4f534a) return JSON.parse(buf.subarray(off + 8, off + 8 + len).toString("utf8"));
+    off += 8 + len;
+  }
+  throw new Error(`${path} has no JSON chunk`);
+}
+
+/** World bounds, walking the node tree. Translation and scale only: nothing in
+ *  the folder arrives rotated, and a rotated box would have to be measured by
+ *  its corners rather than its extents. */
+function glbBox(g: Gltf) {
+  const lo = [Infinity, Infinity, Infinity], hi = [-Infinity, -Infinity, -Infinity];
+  let seen = false;
+  const meshBounds = (m: number) => {
+    const b = { lo: [Infinity, Infinity, Infinity], hi: [-Infinity, -Infinity, -Infinity] };
+    for (const p of g.meshes?.[m]?.primitives ?? []) {
+      const a = g.accessors?.[p.attributes?.POSITION ?? -1];
+      if (!a?.min || !a?.max) return null;
+      for (let i = 0; i < 3; i++) { b.lo[i] = Math.min(b.lo[i], a.min[i]); b.hi[i] = Math.max(b.hi[i], a.max[i]); }
+    }
+    return b;
+  };
+  const walk = (idx: number, t: number[], s: number[]) => {
+    const n = g.nodes[idx];
+    const ns = (n.scale ?? [1, 1, 1]).map((v, i) => v * s[i]);
+    const nt = (n.translation ?? [0, 0, 0]).map((v, i) => v * s[i] + t[i]);
+    if (n.mesh != null) {
+      const b = meshBounds(n.mesh);
+      if (b) {
+        seen = true;
+        for (let i = 0; i < 3; i++) {
+          const a = b.lo[i] * ns[i] + nt[i], c = b.hi[i] * ns[i] + nt[i];
+          lo[i] = Math.min(lo[i], a, c); hi[i] = Math.max(hi[i], a, c);
+        }
+      }
+    }
+    for (const c of n.children ?? []) walk(c, nt, ns);
+  };
+  for (const root of g.scenes?.[g.scene ?? 0]?.nodes ?? []) walk(root, [0, 0, 0], [1, 1, 1]);
+  return seen ? { lo, hi, size: hi.map((v, i) => v - lo[i]) } : null;
+}
 
 let failures = 0;
 function check(name: string, pass: boolean, detail = "") {
@@ -30,6 +95,56 @@ for (const [key, spec] of Object.entries(MODELS)) {
   check(`registry/${key} names a file`, /\.(glb|gltf)$/i.test(spec.file), spec.file);
   check(`registry/${key} documents its convention`, !!spec.note && spec.note.length > 20);
   check(`registry/${key} has a fallback`, typeof spec.fallback === "function");
+}
+
+/* ---- the files in the folder, against what the registry says about them ----
+ *
+ * Read straight out of the .glb rather than loaded: half of them are Draco
+ * compressed, and the decoder wants a Worker, which does not exist here. It
+ * does not need decoding anyway — glTF requires min/max on the POSITION
+ * accessor, so the bounding box is in the JSON chunk whether or not the
+ * vertices are readable. That is enough to catch the two things that go wrong
+ * with a dropped-in model: it is the wrong size, or its origin is in the
+ * middle of it and half the model is underground.
+ *
+ * Every model on threejsassets is centred on its own box, which is why the
+ * registry entries carry an offset. This is the check that says so. */
+{
+  const dir = join(here, "..", "public", "models");
+  const centred = new Set(["crate"]);   // driven by a cannon body, which is centred too
+  /* laid by the track frame rather than by the ground: the rail is the origin
+     and the steelwork hangs below it, which is what makes a loop possible */
+  const airborne = new Set(["coaster-track"]);
+
+  for (const [key, spec] of Object.entries(MODELS)) {
+    const path = join(dir, spec.file);
+    if (!existsSync(path)) continue;    // procedural, and that is a complete world
+
+    const g = glbJson(path);
+    const box = glbBox(g);
+    if (!box) { check(`model/${key} declares its bounds`, false, "no POSITION min/max"); continue; }
+
+    const s = spec.scale ?? 1;
+    const off = spec.offset ?? [0, 0, 0];
+    const lo = box.lo.map((v, i) => v * s + off[i]);
+    const size = box.size.map(v => v * s);
+    const dims = size.map(round).join(" x ");
+
+    check(`model/${key} is a sane size`, size.every(v => v > .1 && v < 40), `${dims} m`);
+    if (centred.has(key))
+      check(`model/${key} is centred, as its note says`, Math.abs(lo[1] + size[1] / 2) < .06,
+        `min.y = ${round(lo[1])}`);
+    else if (!airborne.has(key))
+      check(`model/${key} stands on the ground`, Math.abs(lo[1]) < .12, `min.y = ${round(lo[1])} of ${dims}`);
+
+    /* A compressed model with no decoder to hand does not fail loudly — the
+       loader rejects the parse, the scene falls back, and the world looks
+       right minus one model. Checked here so CI says it instead. */
+    if ((g.extensionsRequired ?? []).includes("KHR_draco_mesh_compression")) {
+      const decoder = existsSync(join(here, "..", "public", "draco", "draco_decoder.wasm"));
+      check(`model/${key} has a decoder to load with`, decoder, decoder ? "" : "run `npm run models`");
+    }
+  }
 }
 
 /* ---- the cat statue ----

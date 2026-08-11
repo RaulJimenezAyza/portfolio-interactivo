@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
+import { DRACOLoader } from "three/examples/jsm/loaders/DRACOLoader.js";
 import { MODELS, type ModelSpec } from "./registry";
 import { MODEL_FILES } from "./manifest.generated";
 
@@ -9,6 +10,21 @@ export { registerFallback, MODELS } from "./registry";
 
 const BASE = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
 const loader = new GLTFLoader();
+
+/* Draco, because half the folder needs it.
+ *
+ * Kenney's kit ships plain glTF and loaded without this. Anything exported by
+ * a library that compresses geometry — threejsassets among them — arrives with
+ * KHR_draco_mesh_compression in extensionsRequired, and GLTFLoader without a
+ * decoder does not warn and fall back: it rejects the parse. The catch is that
+ * the loader's own error path here is the fallback, so a missing decoder looks
+ * exactly like a missing file — the procedural model turns up and the world
+ * carries on. That is a good failure mode and a terrible symptom to debug, so:
+ * the decoder is copied into public/draco by scripts/gen-manifest.mjs, and the
+ * path has to carry the basePath or it 404s on Pages and nothing else does. */
+const draco = new DRACOLoader();
+draco.setDecoderPath(`${BASE}/draco/`);
+loader.setDRACOLoader(draco);
 const cache = new Map<string, Promise<THREE.Object3D>>();
 
 /** Just the dimensions, for the common case: a collider that fits whatever
