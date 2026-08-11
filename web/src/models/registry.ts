@@ -140,6 +140,26 @@ export const MODELS: Record<string, ModelSpec> = {
     fallback: () => new THREE.Group()
   },
 
+  /* ---- the other two species ----
+     The conifer has been swappable since the folder existed and the broadleaf
+     and the autumn tree were not, so a forest with one authored tree in it was
+     the only forest you could have. Both are ~7m and stand on their roots. */
+  oak: {
+    file: "oak.glb", scale: 1, collider: "cylinder",
+    note: "Broadleaf. Origin at the roots, about 5.5m tall before the scene scales it by 0.7-1.5.",
+    fallback: () => new THREE.Group()
+  },
+  "tree-autumn": {
+    file: "tree-autumn.glb", scale: 1, collider: "cylinder",
+    note: "The turned tree — one in five on the island. Origin at the roots, about 5.5m tall.",
+    fallback: () => new THREE.Group()
+  },
+  planter: {
+    file: "planter.glb", scale: 1, collider: "cylinder",
+    note: "Plaza planter with its topiary. Origin on the paving, 1.7m across, 2.5m tall.",
+    fallback: () => new THREE.Group()
+  },
+
   crate: {
     /* Deliberately still procedural. threejsassets' Crate 01 loads and lands
        correctly at scale 2 — it was tried — but the crate is not scenery: it

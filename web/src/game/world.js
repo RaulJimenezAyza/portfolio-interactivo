@@ -2553,6 +2553,9 @@ class Game {
         { parent: new Grp() }).parent);
     registerFallback("park-queue", () => new Grp());
     registerFallback("park-path", () => new Grp());
+    registerFallback("oak", () => this.oakModel());
+    registerFallback("tree-autumn", () => this.autumnModel());
+    registerFallback("planter", () => this.planterModel(this.plazaMats.stoneD));
     registerFallback("boulder", () => this.rockModel(0x53506a));
     registerFallback("boulder-sand", () => this.rockModel(0x9a8a6a));
     registerFallback("palm", () => this.palmModel(5.7));
@@ -3487,10 +3490,10 @@ class Game {
     if (!IS_TOUCH)
       for (const gp of gaps.slice(0, 4)) {
         this.bench(Math.sin(gp.mid) * 8.4, Math.cos(gp.mid) * 8.4, gp.mid + Math.PI, stone, stoneD);
-        this.planter(Math.sin(gp.mid) * 11.4, Math.cos(gp.mid) * 11.4, stoneD);
+        this.planter(Math.sin(gp.mid) * 11.4, Math.cos(gp.mid) * 11.4);
       }
     /* the corner the crate pyramid used to occupy */
-    this.planter(-14.6, -11.4, stoneD);
+    this.planter(-14.6, -11.4);
     this.bench(-12.2, -14.2, 2.3, stone, stoneD);
 
     /* ---- physics letters R A U L ----
@@ -3833,8 +3836,8 @@ class Game {
      The foliage goes through foliageMat so it picks up the same wind as the
      trees; a clipped ball that stands dead still next to swaying pines is the
      kind of thing you notice without knowing why. */
-  planter(x, z, stoneD) {
-    const G = new Grp(); G.position.set(x, 0, z); this.scene.add(G);
+  planterModel(stoneD) {
+    const G = new Grp();
     this.m(new CylGeo(.86, .68, .78, 12), stoneD, 0, .39, 0, { parent: G, recv: true });
     this.m(new TorusGeo(.86, .08, 6, 16), stoneD, 0, .76, 0, { parent: G, rx: Math.PI / 2 });
     this.m(new CircleGeo(.8, 12), this.mat(0x3a3026, { roughness: 1 }), 0, .77, 0,
@@ -3843,6 +3846,12 @@ class Game {
     const ball = this.m(new IcoGeo(.72, 1), this.foliageMat(0x2f6b3c), 0, 1.72, 0, { parent: G, recv: true });
     ball.scale.set(1, .88, 1);
     this.m(new IcoGeo(.42, 1), this.foliageMat(0x3a7d4a), .18, 2.32, -.1, { parent: G });
+    return G;
+  }
+  planter(x, z) {
+    const G = getModel("planter");
+    G.position.set(x, 0, z); G.rotation.y = Math.random() * 6; this.scene.add(G);
+    /* the collider is the tub, not the topiary: you can brush the leaves */
     this.scyl(.88, 1, x, .5, z);
     this.addOccluder(x, 1.6, z, 1);
   }
@@ -5213,10 +5222,12 @@ class Game {
     this.scyl(.5 * s, 3 * s, x, y + 1.5 * s, z);
     this.addOccluder(x, y + 3.5 * s, z, 2.0 * s);
   }
-  oak(x, z, s = 1) {
-    const y = heightAt(x, z);
-    const g = new Grp(); g.position.set(x, y, z); g.rotation.y = Math.random() * 6;
-    g.scale.setScalar(s); this.scene.add(g);
+  /* The other two species, split the same way the conifer already was: shape
+     at the origin, placing left to the scene. Nothing about them was swappable
+     before, so a broadleaf dropped in the folder had nowhere to go while the
+     forest around it was half authored pine and half primitives. */
+  oakModel() {
+    const g = new Grp();
     this.m(new CylGeo(.4, .7, 3, 7), this.mat(0x54402c, { roughness: 1 }), 0, 1.5, 0, { parent: g });
     const cols = [0x2d6b3d, 0x3a7d4a, 0x27593a];
     for (let i = 0; i < 3; i++) {
@@ -5224,15 +5235,28 @@ class Game {
       this.m(new IcoGeo(1.7 - i * .25, 0), this.foliageMat(cols[i]),
         Math.cos(a) * .9, 3.6 + Math.sin(a * 2) * .6, Math.sin(a) * .9, { parent: g, recv: true });
     }
+    return g;
+  }
+  oak(x, z, s = 1) {
+    const y = heightAt(x, z);
+    const g = getModel("oak");
+    g.position.set(x, y, z); g.rotation.y = Math.random() * 6;
+    g.scale.setScalar(s); this.scene.add(g);
     this.scyl(.6 * s, 3 * s, x, y + 1.5 * s, z);
     this.addOccluder(x, y + 3.5 * s, z, 1.9 * s);
   }
-  autumnTree(x, z, s = 1) {
-    const y = heightAt(x, z);
-    const g = new Grp(); g.position.set(x, y, z); g.scale.setScalar(s); this.scene.add(g);
+  autumnModel() {
+    const g = new Grp();
     this.m(new CylGeo(.32, .5, 2.8, 6), this.mat(0x4c3527, { roughness: 1 }), 0, 1.4, 0, { parent: g });
     this.m(new IcoGeo(1.9, 0), this.foliageMat(0xb0692f), 0, 3.8, 0, { parent: g, recv: true });
     this.m(new IcoGeo(1.2, 0), this.foliageMat(0xc98a3a), .8, 4.8, .4, { parent: g, recv: true });
+    return g;
+  }
+  autumnTree(x, z, s = 1) {
+    const y = heightAt(x, z);
+    const g = getModel("tree-autumn");
+    g.position.set(x, y, z); g.rotation.y = Math.random() * 6;
+    g.scale.setScalar(s); this.scene.add(g);
     this.scyl(.5 * s, 3 * s, x, y + 1.5 * s, z);
     this.addOccluder(x, y + 3.7 * s, z, 1.8 * s);
   }
