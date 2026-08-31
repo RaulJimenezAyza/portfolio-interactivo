@@ -93,6 +93,9 @@
   #intro .mini{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--mut);letter-spacing:.06em;display:flex;gap:14px;flex-wrap:wrap;justify-content:center;margin-top:8px}
   #intro .mini span{border:1px solid var(--line2);border-radius:4px;padding:6px 10px}
   #introErr{color:var(--amber);font-size:13px;max-width:420px;display:none}
+  /* Sits under the spinner while the model folder comes down. Empty until
+     something writes to it, so it takes no room on a fast connection. */
+  #introProg{font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:.1em;color:var(--mut);min-height:14px}
 
   /* modal (projects) */
   .ov{position:fixed;inset:0;z-index:70;background:#05050799;backdrop-filter:blur(10px);display:none;align-items:center;justify-content:center;padding:24px}

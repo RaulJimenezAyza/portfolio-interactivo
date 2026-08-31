@@ -65,6 +65,10 @@ export const SHELL_HTML = `<div id="scene"></div>
 
   <div id="intro">
     <div class="ring" id="introRing"></div>
+    <!-- What the spinner above is waiting for. Written by whoever primes the
+         model folder and cleared by the same code when the world is up; the
+         scene never touches it, which is why it is not in the i18n sweep. -->
+    <div id="introProg"></div>
     <div class="kick" data-i18n="introKick"></div>
     <h1 data-i18n="introTitle"></h1>
     <p data-i18n="introBody"></p>

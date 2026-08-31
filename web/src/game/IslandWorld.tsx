@@ -3,6 +3,7 @@
 import { useEffect, useRef } from "react";
 import { useThree, useFrame } from "@react-three/fiber";
 import type { WorldHandle } from "@/game/world";
+import { modelProgress, progressDone } from "@/game/progress";
 
 /** The island, mounted inside react-three-fiber's Canvas.
  *
@@ -30,12 +31,14 @@ export function World({ onReady }: { onReady?: (g: unknown) => void }) {
     let live = true;
     (async () => {
       const { primeModels } = await import("@/models/load");
-      const keys = await primeModels();
+      const keys = await primeModels(modelProgress);
       if (keys.length) console.info(`[models] from the folder: ${keys.join(", ")}`);
+      modelProgress(0, 0);
       const world = await import("@/game/world.js");
       const g = await world.boot(ctx);
       if (!live || !g) return;
       game.current = g;
+      progressDone();
       onReady?.(g);
     })();
     return () => { live = false; };

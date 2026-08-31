@@ -127,10 +127,22 @@ export async function preloadModels() {
 const ready = new Map<string, THREE.Object3D>();
 
 /** Resolve every file in the folder into memory. Call once, before building
- *  the world; after this, getModel() answers immediately. */
-export async function primeModels() {
+ *  the world; after this, getModel() answers immediately.
+ *
+ *  `onProgress` is called after each file lands. The intro sits behind a
+ *  spinner for the whole of this and then again for the length of boot(),
+ *  and a spinner that never says anything is indistinguishable from a hang —
+ *  which matters here because the folder is fetched over the network and the
+ *  world after it is not. Reported as a count rather than bytes: the models
+ *  arrive one at a time and a count is the honest unit. */
+export async function primeModels(onProgress?: (done: number, total: number) => void) {
   const keys = Object.keys(MODELS).filter(hasFile);
-  const built = await Promise.all(keys.map(k => loadModel(k)));
+  let done = 0;
+  onProgress?.(0, keys.length);
+  const built = await Promise.all(keys.map(k => loadModel(k).then(o => {
+    onProgress?.(++done, keys.length);
+    return o;
+  })));
   keys.forEach((k, i) => ready.set(k, built[i]));
   return keys;
 }

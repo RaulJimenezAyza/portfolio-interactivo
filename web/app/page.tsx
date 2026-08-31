@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { Canvas } from "@react-three/fiber";
 import { SHELL_HTML } from "@/game/shell";
 import { World } from "@/game/IslandWorld";
+import { modelProgress, progressDone } from "@/game/progress";
 import "./game.css";
 
 /* The island under Next and react-three-fiber.
@@ -32,9 +33,10 @@ export default function Page() {
        tested at all; it is not a fallback and nothing selects it by accident. */
     const alone = new URLSearchParams(location.search).get("standalone") === "1";
     setStandalone(alone);
-    if (alone) import("@/models/load").then(m => m.primeModels())
-      .then(() => import("@/game/world.js"))
+    if (alone) import("@/models/load").then(m => m.primeModels(modelProgress))
+      .then(() => { modelProgress(0, 0); return import("@/game/world.js"); })
       .then(w => w.boot(null))
+      .then(progressDone)
       .catch(err => console.error("[world] standalone boot failed", err));
     setMounted(true);
   }, []);
