@@ -4,12 +4,13 @@
   "private": true,
   "scripts": {
     "models": "node scripts/gen-manifest.mjs",
-    "predev": "npm run models",
-    "prebuild": "npm run models",
+    "og": "node scripts/og.mjs",
+    "predev": "npm run models && npm run og",
+    "prebuild": "npm run models && npm run og",
     "dev": "node scripts/dev.mjs",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint",
+    "lint": "next lint --max-warnings=0",
     "preverify": "npm run models",
     "verify": "tsx scripts/verify.ts"
   },
@@ -22,9 +23,13 @@
     "three": "^0.169.0"
   },
   "devDependencies": {
+    "@resvg/resvg-js": "^2.6.2",
     "@types/node": "^22.7.5",
     "@types/react": "^18.3.11",
     "@types/three": "^0.169.0",
+    "eslint": "^8.57.1",
+    "eslint-config-next": "^14.2.35",
+    "satori": "^0.33.4",
     "tsx": "^4.23.12",
     "typescript": "^5.6.3"
   }

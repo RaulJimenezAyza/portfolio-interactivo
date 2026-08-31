@@ -1,0 +1,19 @@
+{
+  "extends": ["next/core-web-vitals"],
+  "ignorePatterns": [
+    "src/models/manifest.generated.ts",
+    ".next/",
+    ".next-dev/",
+    "out/"
+  ],
+  "overrides": [
+    {
+      "files": ["src/game/world.js"],
+      "rules": {
+        "prefer-const": "off",
+        "no-empty": "off",
+        "no-unused-vars": "off"
+      }
+    }
+  ]
+}
