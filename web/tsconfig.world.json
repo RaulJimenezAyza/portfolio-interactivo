@@ -1,0 +1,30 @@
+{
+  /* Type-checks the scene.
+   *
+   * world.js used to have a world.d.ts sitting next to it, which meant
+   * TypeScript read the four-line declaration and never once looked at the
+   * eight thousand lines it claimed to describe. The declaration is now
+   * worldTypes.ts and the file itself is checked — but not by the main
+   * tsconfig, which is `strict`, and strict over JS that was never written
+   * for it means noImplicitAny on twelve hundred callback parameters. That
+   * is a week of annotating for no defect found.
+   *
+   * Off, then, and what is left is the class of error that is real in
+   * untyped JavaScript: a property that does not exist on the thing you have,
+   * arithmetic on a value that turned out to be a string, a constructor that
+   * is not one. Seventeen of those existed when this was first run and all
+   * seventeen were real.
+   *
+   *   npm run typecheck        (also runs in CI, before the build)
+   */
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "checkJs": true,
+    "strict": false,
+    "noImplicitAny": false,
+    "noEmit": true,
+    "incremental": false,
+    "types": ["node"]
+  },
+  "include": ["src/game/world.js", "src/globals.d.ts", "src/game/worldTypes.ts"]
+}

@@ -20,6 +20,7 @@ import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { buildCatStatue } from "../src/game/props/catStatue";
 import { MODELS } from "../src/models/registry";
+import { installDomStub } from "./dom-stub";
 
 const here = dirname(fileURLToPath(import.meta.url));
 
@@ -256,5 +257,168 @@ for (const [key, spec] of Object.entries(MODELS)) {
     orphans.length ? `${orphans.join(", ")} would render as nothing` : "");
 }
 
-console.log(failures ? `\n${failures} failing` : "\nall good");
-process.exit(failures ? 1 : 0);
+/* ---- the folder's texture ----
+ *
+ * Kenney's kit references Textures/colormap.png as a relative path instead of
+ * embedding it. Without the file every model from that kit loads successfully
+ * and renders untextured: the loader mentions it in the console and nothing
+ * else complains, which is the worst combination available.
+ */
+{
+  const dir = join(here, "..", "public", "models");
+  const kit = Object.values(MODELS).some(spec => existsSync(join(dir, spec.file)));
+  const tex = existsSync(join(dir, "Textures", "colormap.png"));
+  check("the folder's shared texture is where the models look for it", !kit || tex,
+    tex ? "" : "public/models/Textures/colormap.png is missing — the kit will load untextured");
+}
+
+/* ---- the folder's README promises names the scene still asks for ----
+ *
+ * The whole swap-a-model contract is names: the scene never assumes where
+ * anything is, it asks the model for `spin` or `bulb` or `waterHigh` and
+ * derives the rest from the answer. The README is where someone authoring a
+ * replacement reads what to call things, so it is a promise — and a promise
+ * that quietly stops being true is worse than no documentation, because it
+ * costs an export and a reload to find out.
+ *
+ * Numbered families (`tail0 … tail4`, `cab0 … cabN`) are checked by their
+ * stem: the scene builds those names by concatenation, so the literal never
+ * appears in the source.
+ */
+{
+  const readme = readFileSync(join(here, "..", "public", "models", "README.md"), "utf8");
+  const world = readFileSync(join(here, "..", "src", "game", "world.js"), "utf8");
+
+  const table = readme.slice(readme.indexOf("## Named children"));
+  const promised = new Set<string>();
+  for (const line of table.split("\n")) {
+    const cells = line.split("|");
+    if (cells.length < 4 || !/\.glb`/.test(cells[1])) continue;
+    /* `tail0 … tail4` and `cab0 … cabN` name a family, and the scene builds
+       those by concatenation — so the stem is the thing to look for, and in
+       the open-ended ones the placeholder N is part of the ellipsis, not of
+       any name. Cells without an ellipsis keep every letter they have:
+       legFL is a name, not legF with a placeholder on the end. */
+    const family = cells[2].includes("…");
+    for (const m of cells[2].matchAll(/`([A-Za-z]+[0-9]*)`/g))
+      promised.add(family ? m[1].replace(/(?:[0-9]+|N)$/, "") : m[1]);
+  }
+
+  check("the README still lists the names it documents", promised.size > 8, `${promised.size} names`);
+  const orphans = [...promised].filter(n => !new RegExp(`["'\`]${n}`).test(world)).sort();
+  check("every name the README promises is one the scene asks for", orphans.length === 0,
+    orphans.length ? `${orphans.join(", ")} — the README says the scene uses these and it does not` : "");
+}
+
+/* ---- the pure half of the scene, actually run ----
+ *
+ * Every check above this one reads source text or measures a model. These
+ * call the functions.
+ *
+ * world.js touches the DOM at module scope — it wires about a dozen buttons
+ * on the way in — so importing it in Node needs the stub in ./dom-stub.
+ *
+ * What is worth testing is the part where a wrong answer is silent.
+ * heightAt() is the single source of truth for where the ground is, and the
+ * noise under it once used a signed shift that filled half the uint32 range —
+ * fbm capped near 0.5, Math.max(0, h) took the rest, and the whole island
+ * came out flat with nothing in the console.
+ */
+async function scene() {
+  installDomStub();
+
+  const mod: any = await import("../src/game/world.js");
+  const P = mod.__pure;
+  check("the scene's pure half is reachable", !!P && typeof P.heightAt === "function");
+  if (!P) return;
+
+  /* ---- the noise ---- */
+  {
+    let lo = Infinity, hi = -Infinity, nan = false;
+    for (let i = 0; i < 4000; i++) {
+      const v = P.fbm(i * 0.37, i * 0.11);
+      if (!Number.isFinite(v)) nan = true;
+      lo = Math.min(lo, v); hi = Math.max(hi, v);
+    }
+    check("fbm is finite everywhere it was asked", !nan);
+    /* The regression this exists for: a hash that fills half the uint32 range
+       caps fbm near 0.5 and every hill it feeds disappears. */
+    check("fbm uses its whole range", hi > 0.72 && lo < 0.28, `${round(lo)} … ${round(hi)}`);
+    check("fbm is deterministic", P.fbm(3.5, -2.25) === P.fbm(3.5, -2.25));
+  }
+
+  /* ---- the ground ---- */
+  {
+    let nan = false, min = Infinity, max = -Infinity, offshore = Infinity;
+    for (let x = -200; x <= 200; x += 7)
+      for (let z = -200; z <= 200; z += 7) {
+        const h = P.heightAt(x, z);
+        if (!Number.isFinite(h)) nan = true;
+        /* Inside the coastline is where the cat is allowed to be; past it the
+           ground is seabed and is supposed to fall away, which is what makes
+           the island read as one. Two different questions, so two samples. */
+        if (Math.hypot(x, z) <= P.coastRadius(Math.atan2(z, x)) - 4) {
+          min = Math.min(min, h); max = Math.max(max, h);
+        } else offshore = Math.min(offshore, h);
+      }
+    check("heightAt is finite over the whole island", !nan);
+    check("heightAt has hills to walk up", max > 4, `highest ${round(max)} m`);
+    check("no walkable ground is under the sea", min >= -1, `lowest inland ${round(min)} m`);
+    check("the ground falls away past the coast", offshore < -2, `${round(offshore)} m offshore`);
+    check("heightAt is the same answer twice", P.heightAt(12.5, -30.25) === P.heightAt(12.5, -30.25));
+
+    /* The plaza and the temple pads are carved back to y=0 so every building
+       that assumes flat ground is right about it. */
+    check("the plaza is flat", Math.abs(P.heightAt(0, 0)) < 0.01, `${round(P.heightAt(0, 0))} m`);
+    check("flatMask carves the plaza", P.flatMask(0, 0) < 0.01);
+    check("flatMask leaves the hills alone", P.flatMask(120, 120) > 0.9);
+  }
+
+  /* ---- the coast ---- */
+  {
+    let lo = Infinity, hi = -Infinity;
+    for (let a = 0; a < Math.PI * 2; a += 0.05) {
+      const r = P.coastRadius(a);
+      lo = Math.min(lo, r); hi = Math.max(hi, r);
+    }
+    check("the coastline is irregular, not a circle", hi - lo > 4, `${round(lo)} … ${round(hi)} m`);
+    check("the coastline is a sane size", lo > 40 && hi < 200);
+  }
+
+  /* ---- the caverns ---- */
+  {
+    check("the hub is walkable cave floor", P.caveFloorAt(0, 4000) !== null);
+    check("open ground is not cave floor", P.caveFloorAt(0, 0) === null);
+    check("the middle of the hub is roomy", P.caveRoomy(0, 4000, 1) === true);
+    const e = P.entryProgress(0, 0);
+    check("entryProgress stays in range", e >= 0 && e <= 1, `${round(e)} outdoors`);
+  }
+
+  /* ---- Mastermind ----
+     The scorer is the only rule in the game a player can argue with, and
+     duplicates are where every implementation of it goes wrong. */
+  {
+    const sc = (a: number[], b: number[]) => P.mmScore(a, b);
+    const eq = (r: any, hit: number, near: number) => r.hit === hit && r.near === near;
+    check("mmScore: an exact guess is all hits", eq(sc([0, 1, 2, 3], [0, 1, 2, 3]), 4, 0));
+    check("mmScore: nothing in common scores nothing", eq(sc([0, 0, 0, 0], [1, 1, 1, 1]), 0, 0));
+    check("mmScore: a swap is two hits and two nears", eq(sc([0, 1, 3, 2], [0, 1, 2, 3]), 2, 2));
+    check("mmScore: a rotation is four nears", eq(sc([1, 2, 3, 0], [0, 1, 2, 3]), 0, 4));
+    /* One 0 in the code cannot answer for two 0s in the guess. */
+    check("mmScore: a duplicate guess cannot double-count one peg", eq(sc([0, 0, 1, 1], [0, 1, 2, 3]), 1, 1));
+    check("mmScore: hits are taken before nears", eq(sc([2, 2, 2, 3], [2, 3, 4, 5]), 1, 1));
+    check("mmScore never scores more than the code is long",
+      [...Array(200)].every(() => {
+        const rnd = () => [...Array(4)].map(() => Math.floor(Math.random() * 6));
+        const r = sc(rnd(), rnd());
+        return r.hit + r.near <= 4 && r.hit >= 0 && r.near >= 0;
+      }));
+  }
+}
+
+scene()
+  .catch(err => { failures++; console.log(`FAIL  the scene could not be loaded  — ${err?.message ?? err}`); })
+  .then(() => {
+    console.log(failures ? `\n${failures} failing` : "\nall good");
+    process.exit(failures ? 1 : 0);
+  });

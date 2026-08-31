@@ -5,13 +5,15 @@
   "scripts": {
     "models": "node scripts/gen-manifest.mjs",
     "og": "node scripts/og.mjs",
-    "predev": "npm run models && npm run og",
-    "prebuild": "npm run models && npm run og",
+    "cv": "tsx scripts/gen-cv.ts",
+    "predev": "npm run models && npm run og && npm run cv",
+    "prebuild": "npm run models && npm run og && npm run cv",
     "dev": "node scripts/dev.mjs",
     "build": "next build",
     "start": "next start",
     "lint": "next lint --max-warnings=0",
-    "preverify": "npm run models",
+    "typecheck": "tsc -p tsconfig.world.json",
+    "preverify": "npm run models && npm run cv",
     "verify": "tsx scripts/verify.ts"
   },
   "dependencies": {

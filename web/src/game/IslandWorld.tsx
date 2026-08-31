@@ -2,7 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import { useThree, useFrame } from "@react-three/fiber";
-import type { WorldHandle } from "@/game/world";
+import type { WorldHandle } from "@/game/worldTypes";
 import { modelProgress, progressDone } from "@/game/progress";
 
 /** The island, mounted inside react-three-fiber's Canvas.

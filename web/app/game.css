@@ -92,6 +92,12 @@
   #startBtn:hover{background:var(--green);color:#0a0a0c}
   #intro .mini{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--mut);letter-spacing:.06em;display:flex;gap:14px;flex-wrap:wrap;justify-content:center;margin-top:8px}
   #intro .mini span{border:1px solid var(--line2);border-radius:4px;padding:6px 10px}
+  /* The CV rendered as a document, under everything. Present in the markup
+     and readable by a screen reader; clipped to a pixel rather than
+     display:none, which would take it out of the accessibility tree along
+     with everything else. */
+  .cv-static{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0 0 0 0);clip-path:inset(50%);white-space:nowrap;border:0}
+
   #introErr{color:var(--amber);font-size:13px;max-width:420px;display:none}
   /* Sits under the spinner while the model folder comes down. Empty until
      something writes to it, so it takes no room on a fast connection. */
@@ -230,3 +236,17 @@
 /* react-three-fiber's canvas takes the place the world's own used to fill.
    #scene in the shell keeps its z-order and the HUD still sits above it. */
 .r3f-host { position: fixed; inset: 0; z-index: 0; }
+
+  /* ---- reduced motion ----
+     The island itself is motion and cannot honour this — a game about a cat
+     that runs is a cat that runs. What can honour it is everything around the
+     game: the loading spinner that turns forever, the panels that fly up, the
+     toast that fades. Those are decoration, and decoration is exactly what
+     this setting is asking about. */
+  @media (prefers-reduced-motion: reduce) {
+    *,*::before,*::after{animation-duration:.001ms !important;animation-iteration-count:1 !important;
+      transition-duration:.001ms !important;scroll-behavior:auto !important}
+    /* A ring that no longer turns has to say something else, or it reads as
+       a border someone forgot to remove. */
+    #intro .ring{border-top-color:var(--green);border-right-color:var(--green);opacity:.7}
+  }

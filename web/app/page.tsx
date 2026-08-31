@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { Canvas } from "@react-three/fiber";
 import { SHELL_HTML } from "@/game/shell";
+import { CV_HTML } from "@/content/cv.generated";
 import { World } from "@/game/IslandWorld";
 import { modelProgress, progressDone } from "@/game/progress";
 import "./game.css";
@@ -43,6 +44,12 @@ export default function Page() {
 
   return (
     <>
+      {/* The CV as a document, rendered into the static HTML from the same
+          tables the island reads — see scripts/gen-cv.ts. Visually hidden and
+          deliberately not aria-hidden: a crawler, or a screen reader arriving
+          before the world has booted, would otherwise find a title and an
+          empty canvas. */}
+      <div className="cv-static" dangerouslySetInnerHTML={{ __html: CV_HTML }} />
       <div dangerouslySetInnerHTML={{ __html: SHELL_HTML }} />
       {mounted && !standalone && (
         <div className="r3f-host">

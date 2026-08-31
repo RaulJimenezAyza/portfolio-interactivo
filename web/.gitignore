@@ -3,6 +3,7 @@ node_modules/
 out/
 next-env.d.ts
 src/models/manifest.generated.ts
+src/content/cv.generated.ts
 public/draco/
 
 # Drawn by scripts/og.mjs on every build, from app/game.css's palette. Same

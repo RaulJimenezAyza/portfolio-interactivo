@@ -35,9 +35,9 @@ jobs:
       run:
         working-directory: web
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: npm
@@ -50,6 +50,12 @@ jobs:
       # breaking rather than a style anyone has an opinion about.
       - run: npm run lint
 
+      # The scene is plain JavaScript and the main tsconfig is strict, so it
+      # gets its own pass with strict off — enough to catch a property that
+      # does not exist and arithmetic on a string, which is what actually goes
+      # wrong in eight thousand untyped lines.
+      - run: npm run typecheck
+
       # The scene checks run without a browser: no DOM, no WebGL, no render
       # loop. They catch a model that floats, one that is buried, one that
       # faces backwards, an id the world reaches for that the shell does not
@@ -61,7 +67,7 @@ jobs:
       # public/models, so dropping a .glb in and pushing is the whole workflow.
       - run: npm run build
 
-      - uses: actions/upload-pages-artifact@v3
+      - uses: actions/upload-pages-artifact@v5
         with:
           path: web/out
 
@@ -73,4 +79,4 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - id: deployment
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@v5

@@ -81,9 +81,9 @@ const GREEN = "#7fdca8", AMBER = "#e8b06a", BLUE = "#8fb0ff",
 /* ---------- i18n ---------- */
 const I18N = {
   es: {
-    role: "full stack & gameplay dev", infoBtn: "CV / Info", kmh: "vel",
-    legDrive: "mover", legBoost: "correr", legBrake: "saltar", legOpen: "abrir",
-    legHonk: "maullar", legReset: "reset", legPlay: "jugar",
+    role: "full stack & gameplay dev", infoBtn: "CV / Info", speedLabel: "vel",
+    legMove: "mover", legRun: "correr", legJump: "saltar", legOpen: "abrir",
+    legMeow: "maullar", legReset: "reset", legPlay: "jugar",
     helpTip: "Ver los controles",
     promptK: "lugar sagrado", promptO: "pulsa E o clic para entrar",
     introKick: "La Isla del Gato · portfolio jugable",
@@ -110,9 +110,9 @@ const I18N = {
     contactBody: "Full stack de día en Service Next, gameplay de noche. Abierto a oportunidades de gameplay, backend o fullstack — y a cualquier proyecto con un problema raro dentro. Respondo rápido."
   },
   en: {
-    role: "full stack & gameplay dev", infoBtn: "CV / Info", kmh: "spd",
-    legDrive: "move", legBoost: "run", legBrake: "jump", legOpen: "open",
-    legHonk: "meow", legReset: "reset", legPlay: "play",
+    role: "full stack & gameplay dev", infoBtn: "CV / Info", speedLabel: "spd",
+    legMove: "move", legRun: "run", legJump: "jump", legOpen: "open",
+    legMeow: "meow", legReset: "reset", legPlay: "play",
     helpTip: "Show the controls",
     promptK: "sacred place", promptO: "press E or click to enter",
     introKick: "Cat Island · playable portfolio",
@@ -325,6 +325,83 @@ function closeProject() {
 }
 $("#modal").addEventListener("click", e => { if (e.target.id === "modal") closeProject(); });
 $("#mClose").addEventListener("click", closeProject);
+
+/* ---------- overlay keyboard and focus ----------
+ *
+ * Four overlays, four different functions that open them, and none of them
+ * knew anything about the keyboard: Tab walked straight out of an open panel
+ * and into the buttons behind it, and only Mastermind closed on Escape. A
+ * dialog you can tab out of is a dialog a keyboard user cannot leave, because
+ * the thing that closes it is no longer where the focus is.
+ *
+ * Driven off the class the overlays already toggle rather than by editing the
+ * four open/close paths. They all end in `.ov.show`, so watching for that is
+ * one place instead of eight, and an overlay added later is covered without
+ * anyone remembering to wire it.
+ */
+const OVERLAY_CLOSE = { modal: "#mClose", arc: "#arcClose", mm: "#mmClose", info: "#infoClose" };
+const FOCUSABLE = 'a[href],button:not([disabled]),input,select,textarea,[tabindex]:not([tabindex="-1"])';
+let overlayReturn = null;
+
+function overlayFocusable(el) {
+  return Array.from(el.querySelectorAll(FOCUSABLE))
+    .filter(n => n.offsetParent !== null || n === document.activeElement);
+}
+
+function onOverlayKey(e) {
+  const open = $$(".ov.show").pop();
+  if (!open) return;
+  if (e.key === "Escape") {
+    e.preventDefault();
+    /* Click the panel's own close button rather than stripping the class:
+       each one also unducks the audio and clears its slice of state. */
+    const btn = $(OVERLAY_CLOSE[open.id]);
+    if (btn) btn.click(); else open.classList.remove("show");
+    return;
+  }
+  if (e.key !== "Tab") return;
+  const items = overlayFocusable(open);
+  if (!items.length) return;
+  const first = items[0], last = items[items.length - 1];
+  /* Focus that has escaped the panel — or never entered it — comes back to
+     the end or the beginning depending on which way Tab was going. */
+  if (!open.contains(document.activeElement)) {
+    e.preventDefault();
+    (e.shiftKey ? last : first).focus();
+  } else if (e.shiftKey && document.activeElement === first) {
+    e.preventDefault(); last.focus();
+  } else if (!e.shiftKey && document.activeElement === last) {
+    e.preventDefault(); first.focus();
+  }
+}
+addEventListener("keydown", onOverlayKey, true);
+
+/* The class is toggled by five different functions; this is the one place
+   that reacts to it. */
+function watchOverlays() {
+  const seen = new WeakMap();
+  const obs = new MutationObserver(records => {
+    for (const r of records) {
+      const el = /** @type {HTMLElement} */ (r.target);
+      const show = el.classList.contains("show");
+      if (seen.get(el) === show) continue;
+      seen.set(el, show);
+      if (show) {
+        overlayReturn = document.activeElement;
+        const items = overlayFocusable(el);
+        if (items.length) items[0].focus();
+      } else if (overlayReturn && typeof overlayReturn.focus === "function") {
+        overlayReturn.focus();
+        overlayReturn = null;
+      }
+    }
+  });
+  for (const el of $$(".ov")) {
+    seen.set(el, el.classList.contains("show"));
+    obs.observe(el, { attributes: true, attributeFilter: ["class"] });
+  }
+}
+watchOverlays();
 
 /* ---------- info / CV overlay ---------- */
 function sectionHTML(sec) {
@@ -2201,6 +2278,7 @@ for (const k in CAVE_NODES) {                    // resolve to world space once
   CAVE_NODES[k].x += CAVE_ORIGIN.x;
   CAVE_NODES[k].z += CAVE_ORIGIN.z;
 }
+/** @type {[string, string, number][]} */
 const CAVE_EDGES = [
   ["gate", "hub", 6], ["hub", "echo", 6], ["hub", "river", 6],
   ["hub", "runes", 6], ["hub", "crypt", 6]
@@ -2339,6 +2417,10 @@ class GradePass {
   constructor(shaderDonor, quadDonor) {
     const ShaderMat = shaderDonor.compositeMaterial.constructor;
     const FSQuad = quadDonor.fsQuad.constructor;
+    /* Duck-typed rather than extending Pass — it borrows the shader material
+       and the fullscreen quad off two passes the composer already built. The
+       marker is what the rest of three uses to recognise one. */
+    this.isPass = true;
     this.enabled = true;
     this.needsSwap = true;
     this.clear = false;
@@ -2600,7 +2682,11 @@ class Game {
   }
   initLightPool(n) {
     for (let i = 0; i < n; i++) {
-      const l = new PtLight(0xffffff, 0, 10, 2);
+      /* `k` is the key of whatever claimed this light and `src` the thing it
+         is tracking; the pool is fixed so the shader's light count never
+         changes. */
+      const l = /** @type {import("three").PointLight & { k: number, src: any }} */
+        (new PtLight(0xffffff, 0, 10, 2));
       l.k = 0; l.src = null;
       this.scene.add(l);
       this.lightPool.push(l);
@@ -2807,7 +2893,7 @@ class Game {
     body.addShape(new CBox(new CVec(sx / 2, sy / 2, sz / 2)));
     body.position.set(x, y, z);
     if (rx) {
-      const Q = body.quaternion.constructor;
+      const Q = /** @type {any} */ (body.quaternion.constructor);
       const qy = new Q(), qp = new Q();
       qy.setFromAxisAngle(new CVec(0, 1, 0), ry);
       qp.setFromAxisAngle(new CVec(1, 0, 0), rx);
@@ -4627,7 +4713,7 @@ class Game {
        is the same bulb on the far rim and dividing by two gives its position
        round the wheel. A model with no `bulbs` group simply does not chase. */
     const beads = (G.getObjectByName("bulbs")?.children ?? [])
-      .map((o, i) => ({ mat: o.material, phase: Math.floor(i / 2) * .45 }));
+      .map((o, i) => ({ mat: /** @type {any} */ (o).material, phase: Math.floor(i / 2) * .45 }));
     this.anims.push(t => {
       spin.rotation.x = t * .18;
       for (const c of cabs) c.rotation.x = -spin.rotation.x;    // stay level
@@ -7539,6 +7625,7 @@ class Game {
         /* 0 at the belly, 1 at the spine, going the short way round on both
            sides so the two halves match and the seam cannot show */
         const k = Math.abs(((u - .25) + 1.5) % 1 - .5) * 2;
+        /** @type {[number, string][]} */
         const stops = [[0, BELLY], [.3, FADE], [.55, FLANK], [.8, COAT], [1, SPINE]];
         let c = SPINE;
         for (let i = 1; i < stops.length; i++) {
@@ -8322,6 +8409,13 @@ addEventListener("keydown", () => {
    the longer temple names — so wait for the font (but never hang on it). */
 /* `ctx` is react-three-fiber's { gl, scene, camera } when the world is being
    mounted inside a <Canvas>, and null when it stands alone. */
+/**
+ * Builds the island. Pass react-three-fiber's context to have it adopt that
+ * renderer, scene and camera and leave the frame schedule alone; pass nothing
+ * and it makes its own and drives itself.
+ * @param {import("./worldTypes").WorldContext | null} [ctx]
+ * @returns {Promise<import("./worldTypes").WorldHandle | undefined>}
+ */
 export async function boot(ctx = null) {
   try {
     await Promise.race([
@@ -8352,18 +8446,62 @@ export async function boot(ctx = null) {
   } catch (err) {
     console.error(err);
     $("#introRing").style.display = "none";
-    const el = $("#introErr");
-    el.style.display = "block";
-    el.textContent = TXT().err;
+    showBootError(err);
   }
+}
+
+/* ---- the CV, for anything that is not a browser ----
+ *
+ * Every word of Raúl's résumé is in these four tables, and all of it reaches
+ * the page through a canvas and a button. A crawler — or a screen reader
+ * arriving before the world has booted — gets a title and nothing else, which
+ * for a portfolio is the one failure that matters.
+ *
+ * Exported so scripts/gen-cv.ts can render the same content as static HTML
+ * into the page at build time. One source, two renderings: the island and a
+ * document. */
+export const __content = { I18N, PROJECTS, SKILLS, TIMELINE };
+
+/* ---- the pure half, for the headless checks ----
+ *
+ * Everything here is a function of its arguments and nothing else: no scene,
+ * no renderer, no DOM. That makes it the only part of this file that can be
+ * tested without a browser, and it is also the part where a silent wrong
+ * answer does the most damage — heightAt() is the single source of truth for
+ * where the ground is, and an earlier noise hash that only filled half the
+ * uint32 range flattened the entire island without erroring once.
+ *
+ * Exported as one object rather than as fifteen named exports so the module's
+ * public surface stays `boot` plus a clearly-labelled test hatch. Nothing in
+ * the app imports it.
+ */
+export const __pure = {
+  hash2, vnoise, fbm,
+  flatMask, coastRadius, islandHeight, isletHeight, parkHeight, bridgeHeight,
+  terrainHeight, heightAt,
+  caveFloorAt, caveRoomy, caveHeadAt, entryProgress,
+  mmScore
+};
+
+/* What went wrong, on the screen rather than only in a console nobody opens.
+ *
+ * The world failing to build is the one error a visitor can actually hit, and
+ * until now it said the same sentence whatever the cause: a missing WebGL
+ * context, a model that would not parse and a typo all produced "no se pudo
+ * cargar". The inline script in app/layout.tsx has been collecting the real
+ * messages on `window.__errs` for the automation harness all along; this puts
+ * the first one under the apology, where the person who can do something
+ * about it will see it. Clipped, because a stack trace is not an apology. */
+function showBootError(err) {
+  const el = $("#introErr");
+  const detail = String(err?.message ?? err ?? (window.__errs ?? [])[0] ?? "").slice(0, 200);
+  el.style.display = "block";
+  el.textContent = detail ? `${TXT().err}
+
+${detail}` : TXT().err;
+  el.style.whiteSpace = "pre-wrap";
 }
 
 /* No self-boot on import any more: whoever imports this decides when, and
    under react-three-fiber that is after the Canvas exists. */
-setTimeout(() => {
-  if (!game) {
-    const el = $("#introErr");
-    el.style.display = "block";
-    el.textContent = TXT().err;
-  }
-}, 1e4);
+setTimeout(() => { if (!game) showBootError(null); }, 1e4);

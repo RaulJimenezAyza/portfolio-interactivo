@@ -20,29 +20,29 @@ export const SHELL_HTML = `<div id="scene"></div>
       <div class="role" data-i18n="role"></div>
     </div>
     <div class="hud-right">
-      <button class="hbtn" id="helpBtn">?</button>
-      <button class="hbtn" id="audioBtn" title="audio">♪</button>
-      <button class="hbtn" id="langBtn">EN</button>
+      <button class="hbtn" id="helpBtn" aria-label="Ver los controles">?</button>
+      <button class="hbtn" id="audioBtn" title="audio" aria-label="Sonido">♪</button>
+      <button class="hbtn" id="langBtn" aria-label="Cambiar idioma / change language">EN</button>
       <button class="hbtn" id="infoBtn" data-i18n="infoBtn"></button>
     </div>
   </div>
 
   <div id="legend">
-    <div class="grp"><span class="key">W</span><span class="key">A</span><span class="key">S</span><span class="key">D</span><b data-i18n="legDrive"></b></div>
-    <div class="grp"><span class="key">⇧</span><b data-i18n="legBoost"></b></div>
-    <div class="grp"><span class="key">Space</span><b data-i18n="legBrake"></b></div>
+    <div class="grp"><span class="key">W</span><span class="key">A</span><span class="key">S</span><span class="key">D</span><b data-i18n="legMove"></b></div>
+    <div class="grp"><span class="key">⇧</span><b data-i18n="legRun"></b></div>
+    <div class="grp"><span class="key">Space</span><b data-i18n="legJump"></b></div>
     <div class="grp"><span class="key">E</span><b data-i18n="legOpen"></b></div>
     <div class="grp"><span class="key">G</span><b data-i18n="legPlay"></b></div>
-    <div class="grp"><span class="key">H</span><b data-i18n="legHonk"></b></div>
+    <div class="grp"><span class="key">H</span><b data-i18n="legMeow"></b></div>
     <div class="grp"><span class="key">R</span><b data-i18n="legReset"></b></div>
   </div>
 
   <div id="counters">
-    <div class="box" id="speed"><b id="speedV">0</b> <span data-i18n="kmh">vel</span></div>
+    <div class="box" id="speed"><b id="speedV">0</b> <span data-i18n="speedLabel">vel</span></div>
     <div class="box" id="fishHud"></div>
     <div class="box" id="zoneHud"></div>
   </div>
-  <div id="toast"></div>
+  <div id="toast" role="status" aria-live="polite"></div>
 
   <div id="prompt">
     <div class="k" data-i18n="promptK"></div>
@@ -68,7 +68,7 @@ export const SHELL_HTML = `<div id="scene"></div>
     <!-- What the spinner above is waiting for. Written by whoever primes the
          model folder and cleared by the same code when the world is up; the
          scene never touches it, which is why it is not in the i18n sweep. -->
-    <div id="introProg"></div>
+    <div id="introProg" role="status" aria-live="polite"></div>
     <div class="kick" data-i18n="introKick"></div>
     <h1 data-i18n="introTitle"></h1>
     <p data-i18n="introBody"></p>
@@ -79,7 +79,7 @@ export const SHELL_HTML = `<div id="scene"></div>
     <div id="introErr"></div>
   </div>
 
-  <div id="modal" class="ov">
+  <div id="modal" class="ov" role="dialog" aria-modal="true" aria-labelledby="mTitle">
     <div class="box">
       <div class="shot" id="mShot"><span>▚▚▚</span></div>
       <div class="mbody">
@@ -96,13 +96,13 @@ export const SHELL_HTML = `<div id="scene"></div>
     </div>
   </div>
 
-  <div id="arc" class="ov">
+  <div id="arc" class="ov" role="dialog" aria-modal="true" aria-labelledby="arcTitle">
     <div class="box"><div class="inner">
       <div class="num" id="arcKicker"></div>
       <h2 id="arcTitle"></h2>
       <p class="hint" id="arcHint"></p>
       <div class="screen">
-        <canvas id="arcCanvas" width="480" height="330"></canvas>
+        <canvas id="arcCanvas" width="480" height="330" role="img" aria-label="Pantalla del minijuego"></canvas>
         <div class="curtain" id="arcCurtain"><div><b id="arcCurtainT"></b><span id="arcCurtainB"></span></div></div>
       </div>
       <div class="scores">
@@ -116,7 +116,7 @@ export const SHELL_HTML = `<div id="scene"></div>
     </div></div>
   </div>
 
-  <div id="mm" class="ov">
+  <div id="mm" class="ov" role="dialog" aria-modal="true" aria-labelledby="mmTitle">
     <div class="box"><div class="inner">
       <div class="num" id="mmKicker"></div>
       <h2 id="mmTitle"></h2>
@@ -133,7 +133,7 @@ export const SHELL_HTML = `<div id="scene"></div>
     </div></div>
   </div>
 
-  <div id="info" class="ov">
+  <div id="info" class="ov" role="dialog" aria-modal="true" aria-label="CV">
     <div class="box">
       <button class="btn ghost close" id="infoClose"></button>
       <div class="inner" id="infoInner"></div>
