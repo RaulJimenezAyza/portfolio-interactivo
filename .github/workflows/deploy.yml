@@ -45,9 +45,16 @@ jobs:
 
       - run: npm ci
 
+      # Warnings fail it. A lint step nobody has to read is a lint step that
+      # gets ignored, and the rules left on are the ones that catch a build
+      # breaking rather than a style anyone has an opinion about.
+      - run: npm run lint
+
       # The scene checks run without a browser: no DOM, no WebGL, no render
-      # loop. They catch a model that floats, one that is buried and one that
-      # faces backwards, which is most of what goes wrong here.
+      # loop. They catch a model that floats, one that is buried, one that
+      # faces backwards, an id the world reaches for that the shell does not
+      # carry, and a model key with neither a file nor a builder behind it —
+      # which is most of what goes wrong here.
       - run: npm run verify
 
       # prebuild regenerates the model manifest from whatever is in

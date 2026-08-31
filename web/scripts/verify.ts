@@ -187,5 +187,74 @@ for (const [key, spec] of Object.entries(MODELS)) {
   }
 }
 
+/* ---- the shell carries every id the world reaches for ----
+ *
+ * boot() is one straight run of `$("#thing").addEventListener(...)`, so an id
+ * that is missing from the shell is a TypeError on the first null and a black
+ * screen — no partial world, no useful message, and nothing that a geometry
+ * check would ever notice. The shell used to be part of the same file as the
+ * world; now it is a string in another module and the two can drift.
+ *
+ * Source text rather than a DOM: none of this can run outside a browser, and
+ * the question — does the markup name what the code asks for — is answerable
+ * without running either.
+ */
+{
+  const world = readFileSync(join(here, "..", "src", "game", "world.js"), "utf8");
+  const shell = readFileSync(join(here, "..", "src", "game", "shell.ts"), "utf8");
+  const ids = (src: string, re: RegExp) => new Set([...src.matchAll(re)].map(m => m[1]));
+
+  const queried = new Set([
+    ...ids(world, /\$\(\s*["']#([A-Za-z0-9_-]+)["']\s*\)/g),
+    ...ids(world, /getElementById\(\s*["']([A-Za-z0-9_-]+)["']\s*\)/g),
+    ...ids(world, /querySelector\(\s*["']#([A-Za-z0-9_-]+)["']\s*\)/g)
+  ]);
+  const inShell = ids(shell, /id="([A-Za-z0-9_-]+)"/g);
+  /* Two of them the world builds itself — the Mastermind board writes its own
+     markup and the retry button is created on demand — so being absent from
+     the shell is correct for those. Detected rather than listed, so a third
+     one does not have to be remembered here. */
+  const madeAtRuntime = new Set([
+    ...ids(world, /\bid="([A-Za-z0-9_-]+)"/g),
+    ...ids(world, /\.id\s*=\s*["']([A-Za-z0-9_-]+)["']/g)
+  ]);
+
+  const missing = [...queried].filter(id => !inShell.has(id) && !madeAtRuntime.has(id)).sort();
+  /* Guards the check itself: a regex that stopped matching would report a
+     clean run over nothing at all. */
+  check("the world queries the ids this test thinks it does", queried.size > 40, `${queried.size} found`);
+  check("shell carries every id the world reaches for", missing.length === 0, missing.join(", "));
+}
+
+/* ---- the scene and the registry agree on their keys ----
+ *
+ * getModel() throws on an unknown key, which is loud but only once the world
+ * is running. registerFallback() throws too. The quiet one is the third case:
+ * a key with no file in the folder and no procedural builder registered for
+ * it hands back the empty Group the registry literal carries, and an empty
+ * Group renders as nothing — no error, no model, no clue. That is what
+ * deleting a .glb from the folder does to a key nobody registered.
+ */
+{
+  const world = readFileSync(join(here, "..", "src", "game", "world.js"), "utf8");
+  const keys = (re: RegExp) => [...world.matchAll(re)].map(m => m[1]);
+  const asked = new Set(keys(/getModel\(\s*["']([a-zA-Z0-9_-]+)["']/g));
+  const registered = new Set(keys(/registerFallback\(\s*["']([a-zA-Z0-9_-]+)["']/g));
+
+  check("the scene asks for models by a name this test can read", asked.size > 5, `${asked.size} keys`);
+  for (const k of [...asked].sort())
+    check(`scene/${k} is a key the registry knows`, k in MODELS);
+  for (const k of [...registered].sort())
+    check(`fallback/${k} is a key the registry knows`, k in MODELS);
+
+  const dir = join(here, "..", "public", "models");
+  const orphans = Object.entries(MODELS)
+    .filter(([k, spec]) => !existsSync(join(dir, spec.file)) && !registered.has(k))
+    .map(([k]) => k)
+    .sort();
+  check("every key with no file has a builder to fall back to", orphans.length === 0,
+    orphans.length ? `${orphans.join(", ")} would render as nothing` : "");
+}
+
 console.log(failures ? `\n${failures} failing` : "\nall good");
 process.exit(failures ? 1 : 0);
