@@ -12,6 +12,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint --max-warnings=0",
+    "pretypecheck": "npm run models",
     "typecheck": "tsc -p tsconfig.world.json",
     "preverify": "npm run models && npm run cv",
     "verify": "tsx scripts/verify.ts"
