@@ -4,4 +4,19 @@ out/
 next-env.d.ts
 src/models/manifest.generated.ts
 public/draco/
+
+# Drawn by scripts/og.mjs on every build, from app/game.css's palette. Same
+# trade as the Draco decoder: generated output in version control goes stale
+# the first time someone forgets to regenerate it.
+public/og.png
 .next-dev/
+
+# TypeScript's incremental build cache — an artefact, and it churns on every
+# build. tsconfig points at it; it does not belong in history.
+tsconfig.tsbuildinfo
+
+# Raw kit downloads kept for reference while a model is being fitted. Nothing
+# reads from here: gen-manifest.mjs only lists public/models, so a file parked
+# in one of these is invisible to the build until it is moved across.
+.tmp-ck/
+assets-inbox/
