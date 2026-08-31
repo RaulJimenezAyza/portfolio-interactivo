@@ -7849,14 +7849,14 @@ class Game {
        glued to the back: a mackerel tabby wants stripes that wrap around the
        barrel and fade into a cream belly, which is a two-minute canvas and no
        extra geometry at all. */
-    const fur = new StdMat({ map: this.catFurTexture("body"), roughness: .82 });
-    const furHead = new StdMat({ map: this.catFurTexture("head"), roughness: .82 });
+    const fur = new StdMat({ map: this.catFurTexture("body"), roughness: .82, flatShading: true });
+    const furHead = new StdMat({ map: this.catFurTexture("head"), roughness: .82, flatShading: true });
     /* the coat's own mid-tone and the shade under it, for the parts the map
        cannot cover: the legs and the tail rings */
-    const orange = this.mat(0xdd8a45, { roughness: .8 });
-    const darkOr = this.mat(0xc4732f, { roughness: .85 });
-    const cream = this.mat(0xf5e6cc, { roughness: .85 });
-    const pinkM = this.mat(0xd98a80, { roughness: .7 });
+    const orange = this.mat(0xdd8a45, { roughness: .8, flatShading: true });
+    const darkOr = this.mat(0xc4732f, { roughness: .85, flatShading: true });
+    const cream = this.mat(0xf5e6cc, { roughness: .85, flatShading: true });
+    const pinkM = this.mat(0xd98a80, { roughness: .7, flatShading: true });
 
     /* ---- body ----
        Turned onto its side so the sphere's axis runs nose to tail: the coat
@@ -7864,40 +7864,43 @@ class Game {
        barrel is longer than it is wide and the old one was a ball stretched
        along Z, which read as a loaf from behind. Rotating about X sends local
        +Y to +Z, so the scale that lengthens the animal is the local y one. */
-    const bodyMesh = this.m(new SphGeo(.58, 24, 18), fur, 0, .12, -.02, { parent: inner, rx: Math.PI / 2 });
-    bodyMesh.scale.set(.98, 1.36, .82);
+    const bodyMesh = this.m(new SphGeo(.58, 12, 8), fur, 0, .12, -.02, { parent: inner, rx: Math.PI / 2 });
+    bodyMesh.scale.set(1, 1.26, .86);
     /* shoulders, so the neck is not a ball balanced on an egg */
-    const shoulders = this.m(new SphGeo(.4, 16, 12), fur, 0, .2, .4, { parent: inner, rx: Math.PI / 2 });
+    const shoulders = this.m(new SphGeo(.4, 9, 7), fur, 0, .2, .4, { parent: inner, rx: Math.PI / 2 });
     shoulders.scale.set(1.02, .9, .88);
-    const chest = this.m(new SphGeo(.33, 14, 10), cream, 0, -.04, .6, { parent: inner, cast: false });
-    chest.scale.set(.82, .8, .72);
+    /* Faceted, the old chest read as a beard: a big cream ball low between
+       the front legs. Smaller, higher and tucked back, it is a bib on the
+       throat, which is where a tabby's white actually is. */
+    const chest = this.m(new SphGeo(.26, 8, 6), cream, 0, .1, .58, { parent: inner, cast: false });
+    chest.scale.set(.78, .78, .66);
     /* Haunches, and they are the shape of the animal from behind: a cat's
        thigh is a rounded mass that stands proud of the barrel and carries the
        leg under it, not a bump on a flank. */
     for (const sx of [-1, 1]) {
-      const hip = this.m(new SphGeo(.29, 14, 10), fur, sx * .25, .04, -.32, { parent: inner });
+      const hip = this.m(new SphGeo(.29, 9, 7), fur, sx * .26, .04, -.34, { parent: inner });
       hip.scale.set(.82, 1, 1.1);
     }
     /* neck: short and thick, or the head looks stuck on */
-    const neck = this.m(new SphGeo(.27, 12, 9), fur, 0, .46, .62, { parent: inner, cast: false });
+    const neck = this.m(new SphGeo(.27, 7, 5), fur, 0, .46, .62, { parent: inner, cast: false });
     neck.scale.set(.9, .95, 1.05);
 
     /* head */
     const head = new Grp(); head.position.set(0, .66, .78); inner.add(head);
     head.name = "head";
-    const skull = this.m(new SphGeo(.44, 20, 15), furHead, 0, 0, 0, { parent: head });
+    const skull = this.m(new SphGeo(.44, 10, 7), furHead, 0, 0, 0, { parent: head });
     skull.scale.set(1, .92, .95);
     /* cheeks: fur-coloured mass at the jaw, which is what widens a cat's face.
        Cream spikes here read as thorns, not fur, at this scale. */
     for (const sx of [-1, 1]) {
-      const cheek = this.m(new SphGeo(.2, 10, 8), furHead, sx * .3, -.12, .1, { parent: head, cast: false });
+      const cheek = this.m(new SphGeo(.2, 7, 5), furHead, sx * .3, -.12, .1, { parent: head, cast: false });
       cheek.scale.set(.85, .8, .95);
     }
-    const muzzle = this.m(new SphGeo(.21, 12, 9), cream, 0, -.17, .34, { parent: head, cast: false });
+    const muzzle = this.m(new SphGeo(.21, 8, 6), cream, 0, -.17, .34, { parent: head, cast: false });
     muzzle.scale.set(1.18, .7, .86);
-    this.m(new SphGeo(.11, 10, 8), cream, 0, -.27, .22, { parent: head, cast: false }).scale.set(1, .55, .9);
+    this.m(new SphGeo(.11, 7, 5), cream, 0, -.27, .22, { parent: head, cast: false }).scale.set(1, .55, .9);
     /* nose: a rounded wedge, and a philtrum line under it */
-    const nose = this.m(new SphGeo(.075, 8, 6), pinkM, 0, -.045, .52, { parent: head, cast: false });
+    const nose = this.m(new SphGeo(.075, 6, 4), pinkM, 0, -.045, .52, { parent: head, cast: false });
     nose.scale.set(1.25, .85, .8);
     this.m(new BoxGeo(.02, .1, .02), pinkM, 0, -.12, .53, { parent: head, cast: false });
     /* ears + inner ears */
@@ -7948,7 +7951,7 @@ class Game {
        body holds the origin exactly 0.8m above it. The old one stopped at
        -0.89 and the cat walked with its feet through the floor. */
     const LEG_NAMES = ["legFL", "legFR", "legBL", "legBR"];
-    [[-.29, .46], [.29, .46], [-.31, -.42], [.31, -.42]].forEach(([lx, lz], i) => {
+    [[-.29, .46], [.29, .46], [-.31, -.40], [.31, -.40]].forEach(([lx, lz], i) => {
       const pivot = new Grp(); pivot.position.set(lx, 0, lz); inner.add(pivot);
       const back = i >= 2;
       /* The top of the limb, sunk into the body so the two are one shape. It
@@ -7956,17 +7959,17 @@ class Game {
          laid out for a sphere, and a cylinder takes the belly-to-spine
          gradient as a set of vertical bands, which on a leg reads as a
          bandage. Everything below is the coat's own colour. */
-      const top = this.m(new SphGeo(.17, 12, 9), fur, 0, -.02, 0, { parent: pivot, cast: false });
+      const top = this.m(new SphGeo(.17, 7, 5), fur, 0, -.02, 0, { parent: pivot, cast: false });
       top.scale.set(.95, 1.15, 1);
-      this.m(new CylGeo(.145, .1, .44, 10), orange, 0, -.3, 0, { parent: pivot });
+      this.m(new CylGeo(.145, .1, .44, 6), orange, 0, -.3, 0, { parent: pivot });
       /* the ankle, a shade deeper — a dark boot is what this used to be and
          what it should not be */
-      this.m(new CylGeo(.1, .085, .26, 9), back ? darkOr : orange, 0, -.62, 0, { parent: pivot });
-      const paw = this.m(new SphGeo(.125, 12, 9), cream, 0, -.7, .03, { parent: pivot, cast: false });
-      paw.scale.set(1.02, .82, 1.28);
+      this.m(new CylGeo(.1, .085, .26, 6), back ? darkOr : orange, 0, -.62, 0, { parent: pivot });
+      const paw = this.m(new SphGeo(.11, 7, 5), cream, 0, -.705, .03, { parent: pivot, cast: false });
+      paw.scale.set(1.02, .84, 1.26);
       /* toes: shallow ridges on the front of the paw, not three loose beads */
       for (let k = 0; k < 3; k++) {
-        const toe = this.m(new SphGeo(.05, 7, 5), cream, (k - 1) * .062, -.72, .13, { parent: pivot, cast: false });
+        const toe = this.m(new SphGeo(.05, 5, 4), cream, (k - 1) * .062, -.72, .13, { parent: pivot, cast: false });
         toe.scale.set(1, .8, 1.15);
       }
       pivot.name = LEG_NAMES[i];
@@ -7984,8 +7987,8 @@ class Game {
          low between the hind legs */
       seg.position.set(0, i === 0 ? .32 : 0, i === 0 ? -.62 : -.19);
       const r = .125 - i * .014;
-      this.m(new CylGeo(r, r * .88, .2, 9), i % 2 ? darkOr : orange, 0, 0, -.1, { parent: seg, cast: false, rx: Math.PI / 2 });
-      this.m(new SphGeo(r * .93, 9, 7), i === 5 ? cream : (i % 2 ? darkOr : orange), 0, 0, -.2, { parent: seg, cast: false });
+      this.m(new CylGeo(r, r * .88, .2, 6), i % 2 ? darkOr : orange, 0, 0, -.1, { parent: seg, cast: false, rx: Math.PI / 2 });
+      this.m(new SphGeo(r * .93, 6, 5), i === 5 ? cream : (i % 2 ? darkOr : orange), 0, 0, -.2, { parent: seg, cast: false });
       seg.name = "tail" + i;
       parent.add(seg);
       parent = seg;
