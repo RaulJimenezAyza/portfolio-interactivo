@@ -7729,7 +7729,7 @@ class Game {
         const x0 = (i + .5) / 7 * W;
         const lean = (i % 2 ? 1 : -1) * (10 + (i * 37 % 23));
         for (const off of [-W, 0, W]) {
-          g.strokeStyle = i % 3 ? "rgba(150,79,30,0.72)" : "rgba(120,60,22,0.62)";
+          g.strokeStyle = i % 3 ? "rgba(138,68,24,0.88)" : "rgba(104,50,18,0.8)";
           g.lineWidth = 13 + (i * 17 % 9);
           g.beginPath();
           g.moveTo(x0 + off, H * .1);
@@ -7776,7 +7776,7 @@ class Game {
         const y0 = H * (.08 + i * .1);
         const sag = (i % 2 ? 1 : -1) * 7;
         for (const [x0, x1] of [[W * .40, W * 1.02], [-W * .02, W * .10]]) {
-          g.strokeStyle = i % 3 ? "rgba(150,79,30,0.66)" : "rgba(120,60,22,0.58)";
+          g.strokeStyle = i % 3 ? "rgba(138,68,24,0.86)" : "rgba(104,50,18,0.78)";
           g.lineWidth = 11 + (i * 17 % 8);
           g.beginPath();
           g.moveTo(x0, y0);
@@ -7886,35 +7886,35 @@ class Game {
     neck.scale.set(.9, .95, 1.05);
 
     /* head */
-    const head = new Grp(); head.position.set(0, .66, .78); inner.add(head);
+    const head = new Grp(); head.position.set(0, .69, .80); inner.add(head);
     head.name = "head";
-    const skull = this.m(new SphGeo(.44, 10, 7), furHead, 0, 0, 0, { parent: head });
+    const skull = this.m(new SphGeo(.5, 10, 7), furHead, 0, 0, 0, { parent: head });
     skull.scale.set(1, .92, .95);
     /* cheeks: fur-coloured mass at the jaw, which is what widens a cat's face.
        Cream spikes here read as thorns, not fur, at this scale. */
     for (const sx of [-1, 1]) {
-      const cheek = this.m(new SphGeo(.2, 7, 5), furHead, sx * .3, -.12, .1, { parent: head, cast: false });
+      const cheek = this.m(new SphGeo(.23, 7, 5), furHead, sx * .34, -.13, .1, { parent: head, cast: false });
       cheek.scale.set(.85, .8, .95);
     }
-    const muzzle = this.m(new SphGeo(.21, 8, 6), cream, 0, -.17, .34, { parent: head, cast: false });
+    const muzzle = this.m(new SphGeo(.23, 8, 6), cream, 0, -.19, .38, { parent: head, cast: false });
     muzzle.scale.set(1.18, .7, .86);
-    this.m(new SphGeo(.11, 7, 5), cream, 0, -.27, .22, { parent: head, cast: false }).scale.set(1, .55, .9);
+    this.m(new SphGeo(.12, 7, 5), cream, 0, -.3, .24, { parent: head, cast: false }).scale.set(1, .55, .9);
     /* nose: a rounded wedge, and a philtrum line under it */
-    const nose = this.m(new SphGeo(.075, 6, 4), pinkM, 0, -.045, .52, { parent: head, cast: false });
+    const nose = this.m(new SphGeo(.08, 6, 4), pinkM, 0, -.06, .57, { parent: head, cast: false });
     nose.scale.set(1.25, .85, .8);
-    this.m(new BoxGeo(.02, .1, .02), pinkM, 0, -.12, .53, { parent: head, cast: false });
+    this.m(new BoxGeo(.02, .1, .02), pinkM, 0, -.14, .58, { parent: head, cast: false });
     /* ears + inner ears */
     for (const sx of [-1, 1]) {
-      const ear = this.m(new ConeGeo(.2, .44, 5), furHead, sx * .26, .48, -.02, { parent: head });
+      const ear = this.m(new ConeGeo(.26, .58, 5), furHead, sx * .29, .55, -.02, { parent: head });
       ear.rotation.z = -sx * .3; ear.rotation.y = sx * .4;
-      this.m(new ConeGeo(.11, .26, 5), pinkM, 0, .02, .035, { parent: ear, cast: false });
+      this.m(new ConeGeo(.15, .34, 5), pinkM, 0, .02, .045, { parent: ear, cast: false });
       ear.name = sx < 0 ? "earL" : "earR";
     }
     /* eyes: green iris, slit pupil, and a catchlight — the highlight is what
        makes them read as eyes instead of beads at any distance */
     const eyes = [];
     for (const sx of [-1, 1]) {
-      const eye = this.m(new SphGeo(.11, 12, 9), new StdMat({ color: 0x63cf96, emissive: new Col(0x2f7d55), emissiveIntensity: .35, roughness: .18 }), sx * .19, .06, .35, { parent: head, cast: false });
+      const eye = this.m(new SphGeo(.125, 12, 9), new StdMat({ color: 0x63cf96, emissive: new Col(0x2f7d55), emissiveIntensity: .35, roughness: .18 }), sx * .21, .05, .38, { parent: head, cast: false });
       eye.scale.set(1, 1.05, .8);
       /* A vertical slit, not a dot — it is the pupil that says "cat". It has
          to sit far enough forward to break the surface of the eyeball: the
@@ -7959,13 +7959,13 @@ class Game {
          laid out for a sphere, and a cylinder takes the belly-to-spine
          gradient as a set of vertical bands, which on a leg reads as a
          bandage. Everything below is the coat's own colour. */
-      const top = this.m(new SphGeo(.17, 7, 5), fur, 0, -.02, 0, { parent: pivot, cast: false });
+      const top = this.m(new SphGeo(.2, 7, 5), fur, 0, -.02, 0, { parent: pivot, cast: false });
       top.scale.set(.95, 1.15, 1);
-      this.m(new CylGeo(.145, .1, .44, 6), orange, 0, -.3, 0, { parent: pivot });
+      this.m(new CylGeo(.175, .125, .44, 6), orange, 0, -.3, 0, { parent: pivot });
       /* the ankle, a shade deeper — a dark boot is what this used to be and
          what it should not be */
-      this.m(new CylGeo(.1, .085, .26, 6), back ? darkOr : orange, 0, -.62, 0, { parent: pivot });
-      const paw = this.m(new SphGeo(.11, 7, 5), cream, 0, -.705, .03, { parent: pivot, cast: false });
+      this.m(new CylGeo(.125, .105, .26, 6), back ? darkOr : orange, 0, -.62, 0, { parent: pivot });
+      const paw = this.m(new SphGeo(.125, 7, 5), cream, 0, -.7, .03, { parent: pivot, cast: false });
       paw.scale.set(1.02, .84, 1.26);
       /* toes: shallow ridges on the front of the paw, not three loose beads */
       for (let k = 0; k < 3; k++) {
@@ -7986,7 +7986,7 @@ class Game {
       /* the base sits high on the rump, where a tail comes out of a cat, not
          low between the hind legs */
       seg.position.set(0, i === 0 ? .32 : 0, i === 0 ? -.62 : -.19);
-      const r = .125 - i * .014;
+      const r = .155 - i * .017;
       this.m(new CylGeo(r, r * .88, .2, 6), i % 2 ? darkOr : orange, 0, 0, -.1, { parent: seg, cast: false, rx: Math.PI / 2 });
       this.m(new SphGeo(r * .93, 6, 5), i === 5 ? cream : (i % 2 ? darkOr : orange), 0, 0, -.2, { parent: seg, cast: false });
       seg.name = "tail" + i;
