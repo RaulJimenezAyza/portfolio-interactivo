@@ -59,6 +59,7 @@ import { EffectComposer as Composer } from "three/examples/jsm/postprocessing/Ef
 import { RenderPass } from "three/examples/jsm/postprocessing/RenderPass.js";
 import { UnrealBloomPass as BloomPass } from "three/examples/jsm/postprocessing/UnrealBloomPass.js";
 import { OutputPass as OutPass } from "three/examples/jsm/postprocessing/OutputPass.js";
+import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 import {
   World as CWorld,
   SAPBroadphase as CSAP,
@@ -2872,6 +2873,115 @@ class Game {
     return geo;
   }
 
+/* ---------- merging what never moves ----------
+ *
+ * Three.js draws one mesh per call, whatever it is made of, so a paved path
+ * laid tile by tile costs a draw call per tile. From the plaza the scene was
+ * submitting about sixteen hundred of them, and several hundred were paving,
+ * queue railings and the coaster's columns — geometry that is placed once at
+ * boot and never moves again.
+ *
+ * Merged by the material each mesh already has rather than by what it looks
+ * like. That distinction is the whole safety argument: nothing here makes two
+ * meshes share a material that did not share one before, so an animation that
+ * fades a ring's opacity still fades exactly the ring it was written for. A
+ * mesh with a material of its own lands in a bucket of one and is left alone.
+ *
+ * Bucketed by position as well, in cells, because a merged mesh is culled as
+ * one object — pour a whole island into a single buffer and every blade of it
+ * is submitted whenever any of it is on screen. Cells keep the frustum test
+ * useful.
+ *
+ * All or nothing: if any bucket refuses to merge — mismatched attributes,
+ * usually — the whole call is abandoned and the originals are left standing.
+ * Half a merged path is a path with holes in it, and a hole is worse than a
+ * draw call.
+ */
+  mergeStatic(roots, label = "", { cell = 48, outdoorOnly = false } = {}) {
+    const buckets = new Map();
+    let count = 0;
+    for (const root of roots) {
+      root.updateWorldMatrix(true, true);
+      root.traverse(o => {
+        if (!o.isMesh) return;
+        count++;
+        const p = new V3().setFromMatrixPosition(o.matrixWorld);
+        const key = [o.material.uuid, o.castShadow ? 1 : 0, o.receiveShadow ? 1 : 0,
+          Math.floor(p.x / cell), Math.floor(p.z / cell)].join("|");
+        let b = buckets.get(key);
+        if (!b) buckets.set(key, b = { mat: o.material, cast: o.castShadow, recv: o.receiveShadow, geos: [] });
+        const gm = o.geometry.clone();
+        gm.applyMatrix4(o.matrixWorld);          // baked, so the merged mesh sits at the origin
+        b.geos.push(gm);
+      });
+    }
+
+    /* What the merge must not change. Counted before, checked after: the
+       triangles are the same triangles, standing in the same place. It is
+       cheap, it runs in production, and it is the only thing between a merge
+       that is correct and a merge that quietly drops a bucket. */
+    let tris = 0;
+    const span = { lo: [Infinity, Infinity, Infinity], hi: [-Infinity, -Infinity, -Infinity] };
+    const grow = geo => {
+      const pos = geo.getAttribute("position");
+      tris += (geo.index ? geo.index.count : pos.count) / 3;
+      geo.computeBoundingBox();
+      for (const [i, k] of ["x", "y", "z"].entries()) {
+        span.lo[i] = Math.min(span.lo[i], geo.boundingBox.min[k]);
+        span.hi[i] = Math.max(span.hi[i], geo.boundingBox.max[k]);
+      }
+    };
+    for (const b of buckets.values()) for (const g of b.geos) grow(g);
+
+    const made = [];
+    for (const b of buckets.values()) {
+      const geo = b.geos.length > 1 ? mergeGeometries(b.geos, false) : b.geos[0];
+      if (!geo) {                                 // mismatched attributes: leave it all alone
+        for (const g of made) g.geometry.dispose();
+        for (const bb of buckets.values()) for (const g of bb.geos) g.dispose();
+        console.warn(`[merge] ${label || "static"}: geometries would not merge, left as ${count} meshes`);
+        return null;
+      }
+      if (b.geos.length > 1) for (const g of b.geos) g.dispose();
+      const mesh = new Mesh(geo, b.mat);
+      mesh.castShadow = b.cast; mesh.receiveShadow = b.recv;
+      made.push(mesh);
+    }
+
+    /* Same triangles, same extent, or nothing happens. */
+    let outTris = 0;
+    const out = { lo: [Infinity, Infinity, Infinity], hi: [-Infinity, -Infinity, -Infinity] };
+    for (const m of made) {
+      const pos = m.geometry.getAttribute("position");
+      outTris += (m.geometry.index ? m.geometry.index.count : pos.count) / 3;
+      m.geometry.computeBoundingBox();
+      for (const [i, k] of ["x", "y", "z"].entries()) {
+        out.lo[i] = Math.min(out.lo[i], m.geometry.boundingBox.min[k]);
+        out.hi[i] = Math.max(out.hi[i], m.geometry.boundingBox.max[k]);
+      }
+    }
+    const moved = out.lo.some((v, i) => Math.abs(v - span.lo[i]) > 1e-3)
+      || out.hi.some((v, i) => Math.abs(v - span.hi[i]) > 1e-3);
+    if (outTris !== tris || moved) {
+      for (const m of made) m.geometry.dispose();
+      console.warn(`[merge] ${label || "static"}: refused — ${tris} triangles in, ${outTris} out`
+        + (moved ? ", and the extent moved" : ""));
+      return null;
+    }
+
+    for (const root of roots) {
+      root.parent?.remove(root);
+      const i = this.outdoorOnly.indexOf(root);
+      if (i >= 0) this.outdoorOnly.splice(i, 1);
+    }
+    for (const mesh of made) {
+      this.scene.add(mesh);
+      if (outdoorOnly) this.outdoorOnly.push(mesh);
+    }
+    console.info(`[merge] ${label || "static"}: ${count} meshes -> ${made.length}`);
+    return made;
+  }
+
   m(geo, material, x = 0, y = 0, z = 0, o = {}) {
     const mesh = new Mesh(geo, material);
     mesh.position.set(x, y, z);
@@ -4481,6 +4591,10 @@ class Game {
     /* Paved ways from the midway out to each ride, tile by tile. One metre
        each, so the count is the distance — and laid flat, which is the one
        orientation a square paving tile cannot get wrong. */
+    /* Collected rather than left where they land: a metre of paving is a
+       draw call, and there are two hundred of them between here and the
+       queue line below. They are merged together at the end of this method. */
+    const tiles = [];
     for (const target of [plan.wheel, plan.carousel, plan.kiosks[3]]) {
       const a = at(target.fwd, target.side), b = mid;
       const n = Math.round(Math.hypot(a.x - b.x, a.z - b.z));
@@ -4490,7 +4604,7 @@ class Game {
         for (const off of [-.5, .5]) {
           const px = b.x + (a.x - b.x) * t - Math.cos(ry) * off;
           const pz = b.z + (a.z - b.z) * t + Math.sin(ry) * off;
-          this.parkProp("park-path", px, pz, ry);
+          tiles.push(this.parkProp("park-path", px, pz, ry));
         }
       }
     }
@@ -4505,9 +4619,12 @@ class Game {
         const wob = Math.sin(i * .9) * 2.2;
         const px = mid.x + (st.p.x - mid.x) * t - Math.cos(dir) * wob;
         const pz = mid.z + (st.p.z - mid.z) * t + Math.sin(dir) * wob;
-        this.parkProp("park-queue", px, pz, dir + Math.PI / 2);
+        tiles.push(this.parkProp("park-queue", px, pz, dir + Math.PI / 2));
       }
     }
+    /* Paving and railings, one buffer per cell. Both come out of the same kit
+       and share its one material, so they merge with each other as well. */
+    this.mergeStatic(tiles, "park paving", { outdoorOnly: true });
 
     /* ---- where a loose prop may stand ----
        One test, used by both the dressing and the planting below. It was
@@ -5081,6 +5198,8 @@ class Game {
       }
       this.addOccluder(f.p.x, (gy + f.p.y) / 2, f.p.z, 1.2);
     }
+    /* A metre of column at a time up to the rail, and the circuit is long. */
+    this.mergeStatic([SG], "coaster columns", { outdoorOnly: true });
 
     this.buildParkWall();
     this.buildCoasterStation();
@@ -5773,6 +5892,7 @@ class Game {
      The coast used to end in a clean sand line. A scatter of wet boulders and
      driftwood along it gives the silhouette something to bite on. */
   buildShore() {
+    const shore = [];
     const n = IS_TOUCH ? 30 : 64;
     const wet = this.mat(0x3b3a44, { roughness: .55, flatShading: true });
     const dry = this.mat(0x5a5148, { roughness: 1, flatShading: true });
@@ -5786,6 +5906,7 @@ class Game {
       const rk = this.m(new DodGeo(s, 0), y < .35 ? wet : dry, x, y + s * .3, z, { recv: true });
       rk.rotation.set(hash2(i, 1) * 3, hash2(i, 2) * 6, hash2(i, 3) * 3);
       rk.scale.y = .6 + hash2(i, 17) * .5;
+      shore.push(rk);
       if (s > 1.3) this.addOccluder(x, y + s * .3, z, s * .8);
     }
     /* a few bleached logs above the tide line */
@@ -5795,13 +5916,18 @@ class Game {
       const log = this.m(new CylGeo(.28, .34, 3 + hash2(i, 31) * 2.4, 6),
         this.mat(0x8a7f6d, { roughness: 1, flatShading: true }), x, heightAt(x, z) + .3, z, { recv: true });
       log.rotation.set(Math.PI / 2, hash2(i, 37) * 6, .12);
+      shore.push(log);
     }
+    /* Two materials for sixty-odd rocks, hoisted above the loop — which is
+       what makes them mergeable at all. */
+    this.mergeStatic(shore, "shore rocks");
   }
 
   /* ============ rock outcrops ============
      Bare stone breaking out of the hilltops, so the relief reads as an island
      with bones instead of a green blanket. */
   buildOutcrops() {
+    const crops = [];
     let placed = 0, guard = 0;
     const stone = this.mat(0x585569, { roughness: 1, flatShading: true });
     const dark = this.mat(0x413f4e, { roughness: 1, flatShading: true });
@@ -5821,8 +5947,11 @@ class Game {
         b.scale.y = .7 + Math.random() * .6;
       }
       this.addOccluder(x, y + 2, z, 4);
+      crops.push(g);
       placed++;
     }
+    /* they were registered to vanish underground; the merged buffers inherit that */
+    this.mergeStatic(crops, "outcrops", { outdoorOnly: true });
   }
 
   /* ============ pollen ============

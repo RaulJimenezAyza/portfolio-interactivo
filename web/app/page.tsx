@@ -20,6 +20,13 @@ import "./game.css";
  * `mounted` gate is for. #scene stays in the shell as the Canvas's home, so
  * the world's own canvas and R3F's are the same element.
  */
+/* React's StrictMode runs an effect twice in development, and the standalone
+   path has no cleanup to undo a booted world — so the dev page ended up with
+   three canvases stacked on each other and three islands simulating at once,
+   which is also three times the draw calls in any measurement taken there.
+   Module scope, not a ref: the point is to survive the remount. */
+let standaloneBooted = false;
+
 export default function Page() {
   const [mounted, setMounted] = useState(false);
   const [standalone, setStandalone] = useState(false);
@@ -34,11 +41,14 @@ export default function Page() {
        tested at all; it is not a fallback and nothing selects it by accident. */
     const alone = new URLSearchParams(location.search).get("standalone") === "1";
     setStandalone(alone);
-    if (alone) import("@/models/load").then(m => m.primeModels(modelProgress))
-      .then(() => { modelProgress(0, 0); return import("@/game/world.js"); })
-      .then(w => w.boot(null))
-      .then(progressDone)
-      .catch(err => console.error("[world] standalone boot failed", err));
+    if (alone && !standaloneBooted) {
+      standaloneBooted = true;
+      import("@/models/load").then(m => m.primeModels(modelProgress))
+        .then(() => { modelProgress(0, 0); return import("@/game/world.js"); })
+        .then(w => w.boot(null))
+        .then(progressDone)
+        .catch(err => console.error("[world] standalone boot failed", err));
+    }
     setMounted(true);
   }, []);
 
