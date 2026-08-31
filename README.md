@@ -90,14 +90,9 @@ constructor detrás (que se dibujaría como nada, sin error).
 ## Despliegue
 
 `.github/workflows/deploy.yml` corre `lint`, `verify` y `build` en cada push a
-`main` y publica `web/out` en GitHub Pages. Requiere que Pages tenga
-**GitHub Actions** como *source* en los ajustes del repo.
-
-> **`index.html` en la raíz es la versión antigua**: el juego entero en un solo
-> archivo, de antes de la migración. Sigue aquí porque, si Pages todavía sirve
-> desde la rama, es lo que hay publicado. Una vez confirmado que Pages va por
-> Actions, se borra: `git rm "index.html" && git commit -m "chore: drop the
-> single-file build"`.
+`main` y publica `web/out` en GitHub Pages, que tiene **GitHub Actions** como
+*source*. No se sirve nada desde la rama: el `index.html` de un solo archivo
+que vivía en la raíz se borró una vez confirmado eso, y sigue en el historial.
 
 ## Licencia
 
