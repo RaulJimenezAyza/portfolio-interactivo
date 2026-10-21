@@ -14,11 +14,22 @@ peces dorados escondidos, cuevas de cristal y cuatro recreativas dentro.
 - Gato con squash & stretch, doble salto, cola articulada y pose de sentado.
 - Audio sintetizado en tiempo real: música generativa con una paleta distinta
   por templo, ambiente de mar y viento, y efectos por oscilador. Sin archivos.
-- Cuevas de cristal con cuatro recreativas — Pong, Snake, Simon y Mastermind —
-  y récords guardados.
+- Cuevas de cristal con cuatro recreativas — Pong, El Gato Glotón, Las Runas
+  Cantoras y El Muelle de los Doce — más la Cripta del Código (un Mastermind),
+  con récords guardados.
 - Parque de atracciones en su propia isla: noria, carrusel y una montaña rusa
   que se puede montar.
 - Español e inglés, controles de teclado y táctiles.
+
+## Qué cuenta la isla
+
+Cada templo abre una parte del CV: sobre mí, la tesis, **Reloda** (en el Gran
+Almacén, que empezó siendo TriniGlass), gameplay, skills, trayectoria y
+contacto. El panel «CV / Info» tiene además todos los proyectos: Rodalies al
+minuto, Luz barata, Reloda, Interview Coach, Momentum edge study, la tesis y los
+prototipos de gameplay, con enlace a la web en vivo y al código. Todo el texto
+sale de cuatro tablas al principio de `web/src/game/world.js` (`I18N`,
+`PROJECTS`, `SKILLS`, `TIMELINE`).
 
 ## Controles
 
@@ -28,7 +39,7 @@ peces dorados escondidos, cuevas de cristal y cuatro recreativas dentro.
 | `Shift` | correr |
 | `Space` | saltar (dos veces para doble salto) |
 | `E` | entrar en un templo |
-| `G` | jugar al Mastermind (dentro de las Ruinas) |
+| `G` | descifrar el código de la Cripta (en la cueva) |
 | `H` | maullar |
 | `R` | volver a la plaza |
 

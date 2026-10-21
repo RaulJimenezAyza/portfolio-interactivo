@@ -146,7 +146,7 @@ const card = {
             h("div", { display: "flex", fontSize: 96, fontWeight: 700, letterSpacing: -3, marginTop: 14, lineHeight: 1 },
               "La Isla del Gato"),
             h("div", { display: "flex", fontSize: 30, color: DIM, marginTop: 20, maxWidth: 760, lineHeight: 1.35 },
-              "El portfolio de Raúl Jiménez Ayza, jugable: una isla con relieve, siete templos que cuentan su CV y un gato con físicas de verdad.")
+              "El portfolio de Raúl Jiménez Ayza, full stack y gameplay dev, jugable: siete templos con su CV y sus proyectos — Reloda, Rodalies al minuto, Luz barata…")
           ]
         }
       },

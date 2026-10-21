@@ -95,7 +95,7 @@ const I18N = {
     miniHonk: "🕹 4 minijuegos en la cueva",
     startBtn: "▶ Entrar en la isla", loading: "Levantando la isla…",
     toastReset: "Gato de vuelta a la plaza", toastHonk: "¡Miau!",
-    close: "Cerrar", viewRepo: "Ver repositorio",
+    close: "Cerrar", viewRepo: "Ver código", viewSite: "Abrir la web",
     err: "No se pudo iniciar el 3D. Este archivo lleva el motor dentro, solo necesita un navegador con WebGL. Prueba con Chrome/Edge actualizado.",
     zonesHud: "templos", fishHud: "peces",
     discover: "Templo descubierto:",
@@ -105,10 +105,10 @@ const I18N = {
     flipBack: "¡Mortal hacia atrás!", flipFront: "¡Mortal hacia delante!",
     aboutTitle: "Sobre mí",
     aboutP1: "Soy Raúl, ingeniero informático por la UAB (2026). Empecé estudiando diseño y desarrollo de videojuegos en la Universitat de Girona, y esa semilla gamedev sigue en todo lo que hago: mi TFG fue un simulador donde poblaciones de agentes evolucionan por su cuenta buscando comida.",
-    aboutP2: "Hoy programo full stack en Service Next (Montmeló): web, APIs y producto real. Antes, un año largo de becario de TI en GCO, y por el camino construí TriniGlass, una app de gestión de almacén para una pyme que lo llevaba todo en papel. Unity y Unreal por gusto, TypeScript, Python y Node por oficio.",
-    stat1: "motores: Unity, Unreal, Godot, UEFN", stat2: "proyectos de principio a fin", stat3: "prototipos en el cajón",
+    aboutP2: "Hoy soy full stack en Service Next (Montmeló): un backend en Python/FastAPI que sirve agentes de IA y las apps en Next.js que los usan. Antes, un año largo de becario de TI en GCO. Por mi cuenta hago productos que usa gente de verdad: Reloda, que empezó como una app de almacén para una pyme del vidrio que lo llevaba todo en papel, y dos servicios gratuitos en directo, Rodalies al minuto y Luz barata. Unity y Unreal por gusto; TypeScript y Python por oficio.",
+    stat1: "motores: Unity, Unreal, Godot, UEFN", stat2: "productos en marcha con usuarios reales", stat3: "prototipos en el cajón",
     workTitle: "Proyectos", skillsTitle: "Skills", pathTitle: "Trayectoria", contactTitle: "Contacto",
-    contactBody: "Full stack de día en Service Next, gameplay de noche. Abierto a oportunidades de gameplay, backend o fullstack — y a cualquier proyecto con un problema raro dentro. Respondo rápido."
+    contactBody: "Full stack de día en Service Next, gameplay de noche. Ahora mismo trabajando, pero abierto a escuchar ofertas de gameplay, backend o fullstack — y cualquier proyecto con un problema raro dentro. Respondo rápido."
   },
   en: {
     role: "full stack & gameplay dev", infoBtn: "CV / Info", speedLabel: "spd",
@@ -124,7 +124,7 @@ const I18N = {
     miniHonk: "🕹 4 minigames in the cave",
     startBtn: "▶ Enter the island", loading: "Raising the island…",
     toastReset: "Cat back at the plaza", toastHonk: "Meow!",
-    close: "Close", viewRepo: "View repository",
+    close: "Close", viewRepo: "View code", viewSite: "Open the site",
     err: "Could not start 3D. The engine is embedded in this file, it only needs a WebGL browser. Try an up-to-date Chrome/Edge.",
     zonesHud: "temples", fishHud: "fish",
     discover: "Temple discovered:",
@@ -134,59 +134,85 @@ const I18N = {
     flipBack: "Backflip!", flipFront: "Frontflip!",
     aboutTitle: "About",
     aboutP1: "I'm Raúl, Computer Engineering graduate from UAB (2026). I started out studying game design and development at Universitat de Girona, and that gamedev seed is in everything I do: my thesis was a simulator where populations of agents evolve on their own hunting for food.",
-    aboutP2: "Today I write full stack code at Service Next (Montmeló): web, APIs and real product. Before that, a year-plus IT internship at GCO, and along the way I built TriniGlass, a warehouse management app for a small business that ran on paper. Unity and Unreal for fun, TypeScript, Python and Node for a living.",
-    stat1: "engines: Unity, Unreal, Godot, UEFN", stat2: "projects shipped end to end", stat3: "prototypes in the drawer",
+    aboutP2: "Today I'm a full stack engineer at Service Next (Montmeló): a Python/FastAPI backend that serves AI agents, and the Next.js apps that use them. Before that, a year-plus IT internship at GCO. On my own I build products real people use: Reloda, which started as a warehouse app for a glass SME that ran on paper, and two free live services, Rodalies al minuto and Luz barata. Unity and Unreal for fun; TypeScript and Python for a living.",
+    stat1: "engines: Unity, Unreal, Godot, UEFN", stat2: "live products with real users", stat3: "prototypes in the drawer",
     workTitle: "Work", skillsTitle: "Skills", pathTitle: "Path", contactTitle: "Contact",
-    contactBody: "Full stack by day at Service Next, gameplay by night. Open to gameplay, backend or fullstack opportunities — and any project with a weird problem in it. I reply fast."
+    contactBody: "Full stack by day at Service Next, gameplay by night. Employed, but happy to hear about gameplay, backend or fullstack roles — and any project with a weird problem in it. I reply fast."
   }
 };
 
 /* ---------- CV data ---------- */
 const PROJECTS = [
+  { id: "rodalies", color: BLUE, web: "https://rodalies.reloda.es", link: "https://github.com/RaulJimenezAyza/rodalies",
+    short: "R1", kind: { es: "Producto · en directo", en: "Product · live" },
+    title: "Rodalies al minuto",
+    blurb: { es: "Todos los trenes de Rodalies en directo y a qué hora llegas de verdad.", en: "Every Rodalies train live — and when you'll actually arrive." },
+    body: { es: "Renfe dice «+8 min» y te deja hacer la cuenta. Esta web lo convierte en lo que necesitas en el andén: a qué hora sale y llega de verdad tu tren, por qué paradas va, el mapa con todos los trenes moviéndose y los avisos de Renfe, con un detector de líneas que dejan de circular sin avisar. Un recolector guarda cada minuto el estado de todos los trenes para calcular la puntualidad que Renfe no publica. Los datos llegan en directo por WebSocket desde un Durable Object, en castellano y catalán, con 400+ páginas para Google y 0 € al mes.",
+      en: "Renfe says \"+8 min\" and leaves the maths to you. This site turns it into what you need on the platform: when your train really leaves and arrives, every stop on its way, a live map of every train and Renfe's alerts, plus a detector for lines that silently stop running. A collector stores every train every minute to compute the punctuality Renfe doesn't publish. Updates are pushed over WebSockets from a Durable Object, in Spanish and Catalan, with 400+ SEO pages, at €0/month." },
+    tags: ["Cloudflare Workers", "D1", "Durable Objects", "WebSockets", "MapLibre", "GTFS-RT"] },
+  { id: "luz", color: GOLD, web: "https://luz.reloda.es", link: "https://github.com/RaulJimenezAyza/luz",
+    short: "A+", kind: { es: "Producto · en directo", en: "Product · live" },
+    title: "Luz barata",
+    blurb: { es: "El precio de la luz hora a hora como una etiqueta energética.", en: "Spain's electricity price, hour by hour, as an energy label." },
+    body: { es: "El precio de la luz (PVPC) de hoy y de mañana con letras de la A a la G, la mejor hora para poner cada aparato, los impuestos de cada zona (península, Canarias, Ceuta y Melilla) y avisos al móvil cuando salen los precios de mañana. También lee el CSV de tu contador y te dice cuánto ahorrarías, todo en el navegador. Resuelve bien hasta los días de 23 y 25 horas del cambio de hora. 0 € al mes.",
+      en: "Today's and tomorrow's electricity price (PVPC) graded A to G, the best hour for each appliance, taxes by region, and push alerts when tomorrow's prices are out. It also reads your smart-meter CSV and tells you what you'd save, all in the browser — and gets the 23- and 25-hour days of the clock change right. €0/month." },
+    tags: ["Cloudflare Pages", "Workers", "KV", "Web Push", "PWA"] },
+  { id: "reloda", color: AMBER, web: "https://reloda.es", link: "https://github.com/RaulJimenezAyza/reloda-case-study",
+    short: "RL", kind: { es: "Producto · SaaS", en: "Product · SaaS" },
+    title: "Reloda",
+    blurb: { es: "Envases retornables de la fábrica al cliente y vuelta. Empezó como TriniGlass.", en: "Returnable packaging from factory to customer and back. Started as TriniGlass." },
+    body: { es: "Empezó como TriniGlass: una app de almacén para una pyme del vidrio que lo llevaba todo en papel. Creció hasta Reloda, un SaaS que sigue los envases retornables del pedido a la devolución: almacén en 2D y 3D, lectura de QR, planificación de rutas, reparto offline con firma del cliente y portal para clientes. Funciona en producción en un fabricante de vidrio. El código es privado; el caso de estudio es público.",
+      en: "It started as TriniGlass: a warehouse app for a glass SME that ran on paper. It grew into Reloda, a SaaS that tracks returnable packaging from order to return: 2D/3D warehouse, QR scanning, route planning, offline-first delivery with customer signatures and a client portal. In production at a glass manufacturer. The source is private; the case study is public." },
+    tags: ["React 19", "TypeScript", "Firebase", "Three.js", "PWA offline", "Playwright"] },
+  { id: "interview", color: PINK, web: "https://rauljimenezayza.github.io/interview-coach/", link: "https://github.com/RaulJimenezAyza/interview-coach",
+    short: "IC", kind: { es: "IA · voz", en: "AI · voice" },
+    title: "Interview Coach",
+    blurb: { es: "Practica entrevistas en voz alta y recibe feedback de ritmo y contenido.", en: "Practise interview answers out loud and get feedback on delivery and content." },
+    body: { es: "Respondes en voz alta y te devuelve cómo lo has dicho (ritmo, muletillas, pausas) con el reconocimiento de voz de ElevenLabs, y qué has dicho con un modelo de lenguaje local que no puede inventarse datos sobre ti. Backend en FastAPI y frontend en React con TypeScript.",
+      en: "You answer out loud and it tells you how you said it (pace, fillers, pauses) using ElevenLabs speech-to-text, and what you said through a local LLM that can't invent facts about you. FastAPI backend, React + TypeScript frontend." },
+    tags: ["Python", "FastAPI", "React", "TypeScript", "ElevenLabs", "Ollama"] },
+  { id: "momentum", color: RED, link: "https://github.com/RaulJimenezAyza/momentum-edge-study",
+    short: "Δ", kind: { es: "Datos · estudio", en: "Data · study" },
+    title: "Momentum edge study",
+    blurb: { es: "¿Tiene ventaja una estrategia de trading viral? Medido en serio.", en: "Does a viral trading strategy have an edge? Measured properly." },
+    body: { es: "Un sistema de trading asíncrono completo para comprobar una estrategia de cripto que se hizo viral: pruebas walk-forward de 150 días y 14.000 operaciones, entradas aleatorias como control y once «mejoras» que murieron todas fuera de la muestra. La conclusión honesta es la parte interesante.",
+      en: "A full async trading system built to test a crypto strategy that went viral: walk-forward tests over 150 days and 14k trades, random-entry controls, and eleven \"improvements\" that all died out of sample. The honest conclusion is the interesting part." },
+    tags: ["Python", "asyncio", "websockets", "NumPy", "scikit-learn"] },
   { id: "tfg", color: GREEN, link: "https://github.com/RaulJimenezAyza/Evolution-of-intelligent-agents",
     short: "TFG", kind: { es: "TFG · simulación", en: "Thesis · simulation" },
     title: "Evolution of Intelligent Agents",
     blurb: { es: "Agentes que evolucionan buscando comida, con métricas en vivo.", en: "Agents evolving as they hunt for food, with live metrics." },
     body: { es: "Mi Trabajo de Fin de Grado: un simulador donde agentes con parámetros heredables compiten por recursos limitados y la selección hace el resto. El simulador está hecho en C#, y una herramienta aparte en Python (live_graph.py) recibe por UDP el número de agentes y de comida para dibujar en tiempo real la evolución con matplotlib.",
       en: "My final degree thesis: a simulator where agents with heritable parameters compete for limited resources and selection does the rest. Written in C#, with a separate Python tool (live_graph.py) receiving agent and food counts over UDP to plot evolution live with matplotlib." },
-    tags: ["C#", "Python", "UDP", "matplotlib", "algoritmos evolutivos"] },
-  { id: "triniglass", color: AMBER, link: "https://github.com/RaulJimenezAyza/TriniGlass_Demo",
-    short: "TG", kind: { es: "Producto · fullstack", en: "Product · fullstack" },
-    title: "TriniGlass",
-    blurb: { es: "Gestión de almacén e inventario para una pyme que iba en papel.", en: "Warehouse & inventory management for a paper-run SME." },
-    body: { es: "Aplicación de gestión para transformar la operativa logística de una pyme sin herramientas digitales: control de inventario, entradas/salidas de almacén y planificación de producción en un solo sitio. Construida en TypeScript, pensada para que el personal la usara sin manual.",
-      en: "A management app to transform the logistics of a small business with no digital tooling: inventory, warehouse in/out movements and production planning in one place. Built in TypeScript, designed so staff could use it without a manual." },
-    tags: ["TypeScript", "React", "Node.js", "SQL", "inventario"] },
-  { id: "mastermind", color: PINK, link: "https://github.com/RaulJimenezAyza/Mastermind",
-    short: "MM", kind: { es: "Juego · web", en: "Game · web" },
-    title: "Mastermind",
-    blurb: { es: "El clásico juego de deducción, en JavaScript puro.", en: "The classic deduction game, in vanilla JavaScript." },
-    body: { es: "Implementación del clásico juego de códigos de colores: lógica de comprobación, feedback de aciertos y estado de partida, todo en JavaScript sin dependencias. Pequeño pero honesto ejercicio de diseño de reglas y bucle de juego.",
-      en: "An implementation of the classic colour-code game: check logic, hit/near-hit feedback and game state, all dependency-free. A small but honest exercise in rule design and game loop." },
-    tags: ["JavaScript", "game loop", "DOM"] },
+    tags: ["C#", "Python", "UDP", "matplotlib", { es: "algoritmos evolutivos", en: "evolutionary algorithms" }] },
   { id: "gamedev", color: CYAN, link: "https://github.com/RaulJimenezAyza",
     short: "GD", kind: { es: "Gameplay · prototipos", en: "Gameplay · prototypes" },
-    title: "Prototipos de gameplay",
+    title: { es: "Prototipos de gameplay", en: "Gameplay prototypes" },
     blurb: { es: "Unity, Unreal, Godot, UEFN y Roblox — mecánicas y game feel.", en: "Unity, Unreal, Godot, UEFN and Roblox — mechanics & game feel." },
-    body: { es: "Lo que más me gusta programar es gameplay: movimiento, cámaras, estados del jugador y esa sensación de que el mando responde. He trabajado con Unity, Unreal y Godot, y publicado experiencias en Fortnite (UEFN) y Roblox — un gran campo de pruebas para diseñar reglas con jugadores reales dentro.",
-      en: "What I most enjoy programming is gameplay: movement, cameras, player states and that feeling of the controller responding. I've worked with Unity, Unreal and Godot, and shipped experiences in Fortnite (UEFN) and Roblox — a great testing ground for designing rules with real players inside." },
+    body: { es: "Lo que más me gusta programar es gameplay: movimiento, cámaras, estados del jugador y esa sensación de que el mando responde. He trabajado con Unity, Unreal y Godot, y publicado experiencias en Fortnite (UEFN) y Roblox — un gran campo de pruebas para diseñar reglas con jugadores reales dentro. Ahora mismo, en el cajón: «Otra vida», un simulador de vida con un mundo procedural y NPCs que piensan con IA local.",
+      en: "What I most enjoy programming is gameplay: movement, cameras, player states and that feeling of the controller responding. I've worked with Unity, Unreal and Godot, and shipped experiences in Fortnite (UEFN) and Roblox — a great testing ground for designing rules with real players inside. In the drawer right now: \"Otra vida\", a life sim with a procedural world and NPCs that think with a local AI." },
     tags: ["Unity", "Unreal", "Godot", "UEFN", "Roblox", "C#"] }
 ];
+/* index of a project by id (the temples point at projects by id, not by position) */
+const P = id => PROJECTS.findIndex(p => p.id === id);
 
 const SKILLS = [
   { label: { es: "Gamedev", en: "Gamedev" }, color: GREEN,
     items: ["Unity", "Unreal Engine", "Godot", "UEFN / Fortnite", "Roblox", "C#", { es: "IA de agentes", en: "Agent AI" }] },
   { label: { es: "Backend & datos", en: "Backend & data" }, color: AMBER,
-    items: ["Python", "Node.js", "SQL", "APIs REST", { es: "Modelado de datos", en: "Data modelling" }, "Git"] },
+    items: ["Python", "FastAPI", "Node.js", "PostgreSQL", "APIs REST", "Docker", { es: "Modelado de datos", en: "Data modelling" }, "Git"] },
   { label: { es: "Frontend", en: "Frontend" }, color: BLUE,
-    items: ["React", "Vue", "TypeScript", "JavaScript", "HTML / CSS", "Three.js"] }
+    items: ["React", "Next.js", "TypeScript", "Vue", "JavaScript", "HTML / CSS", "Three.js"] },
+  { label: { es: "IA & cloud", en: "AI & cloud" }, color: PINK,
+    items: [{ es: "Agentes LLM", en: "LLM agents" }, "LangChain", "Langfuse", "ElevenLabs", "Ollama", "Cloudflare Workers / D1", "Firebase"] }
 ];
 
 const TIMELINE = [
   { when: { es: "2026 — hoy", en: "2026 — now" }, color: GREEN,
-    role: { es: "Programador full stack", en: "Full stack developer" },
+    role: { es: "Ingeniero full stack", en: "Full stack engineer" },
     place: "Service Next · Montmeló",
-    detail: { es: "Desarrollo full stack de producto real: tecnologías web, APIs y frontend, en jornada completa y presencial.", en: "Full stack development on real product: web technologies, APIs and frontend, full-time on site." } },
+    detail: { es: "Un servicio en Python 3.12 / FastAPI que sirve varios agentes de IA (LangChain, trazados con Langfuse) y la API REST de dos apps en Next.js 16 / React 19: una plataforma interna de tickets para consultores técnicos y un portal para clientes, más las herramientas que usa nuestro agente de voz de ElevenLabs cuando llaman los talleres. Postgres, workers asíncronos, Docker.",
+      en: "A Python 3.12 / FastAPI service that serves several AI agents (LangChain, traced with Langfuse) and the REST API behind two Next.js 16 / React 19 apps: an internal ticketing platform for technical consultants and a customer portal, plus the tools our ElevenLabs voice agent calls when workshops phone in. Postgres, async workers, Docker." } },
   { when: { es: "2025 — 2026", en: "2025 — 2026" }, color: AMBER,
     role: { es: "Becario de TI", en: "IT intern" },
     place: "GCO · Sant Cugat del Vallès",
@@ -210,17 +236,18 @@ const ZONES_META = [
   { key: "about", kind: "section", section: "about", color: AMBER,
     name: { es: "La Casa del Gato", en: "The Cat's House" },
     lore: { es: "Todo héroe sale de una casa. En esta se duerme poco y se programa mucho.", en: "Every hero leaves a house. In this one: little sleep, lots of code." } },
-  { key: "tfg", kind: "project", idx: 0, color: GREEN,
+  { key: "tfg", kind: "project", idx: P("tfg"), color: GREEN,
     name: { es: "Templo de la Evolución", en: "Temple of Evolution" },
     lore: { es: "10.000 generaciones de bichitos aprendieron a buscar comida aquí. Los supervivientes te observan.", en: "10,000 generations of critters learned to forage here. The survivors are watching you." } },
-  { key: "triniglass", kind: "project", idx: 1, color: AMBER,
+  /* key stays "triniglass" (its music palette and builder use it); the temple now tells Reloda's story */
+  { key: "triniglass", kind: "project", idx: P("reloda"), color: AMBER,
     name: { es: "El Gran Almacén", en: "The Great Warehouse" },
-    lore: { es: "Aquí murió el papel y nació el inventario digital. Las cajas se pueden empujar. Tú puedes.", en: "Paper died here and digital inventory was born. The crates can be pushed. Go on." } },
+    lore: { es: "Aquí murió el papel: primero fue TriniGlass, hoy es Reloda. Las cajas se pueden empujar. Tú puedes.", en: "Paper died here: first it was TriniGlass, now it's Reloda. The crates can be pushed. Go on." } },
   /* The Ruins of the Riddle used to stand here, running the same Mastermind
      the Crypt of the Code runs underground. The project itself is still in
      the CV panel; the temple that duplicated a cave hall is gone, and its
      road out of the plaza now leads to the bridge. */
-  { key: "gamedev", kind: "project", idx: 3, color: CYAN,
+  { key: "gamedev", kind: "project", idx: P("gamedev"), color: CYAN,
     name: { es: "Santuario Arcade", en: "Arcade Sanctuary" },
     lore: { es: "La máquina lleva décadas jugando sola al pong. Los bumpers son inofensivos. Casi.", en: "The machine has been playing pong against itself for decades. The bumpers are harmless. Mostly." } },
   { key: "skills", kind: "section", section: "skills", color: RED,
@@ -304,11 +331,16 @@ function fillProjectModal(i) {
   $("#mShot span").textContent = p.short;
   $("#mKind").textContent = L(p.kind);
   $("#mKind").style.color = p.color;
-  $("#mTitle").textContent = p.title;
+  $("#mTitle").textContent = L(p.title);
   $("#mBody").textContent = L(p.body);
-  $("#mTags").innerHTML = p.tags.map(x => `<span class="tag">${x}</span>`).join("");
+  $("#mTags").innerHTML = p.tags.map(x => `<span class="tag">${L(x)}</span>`).join("");
+  /* live projects get "open the site" as the main button and the code as the secondary one */
+  const site = $("#mWeb");
+  site.style.display = p.web ? "" : "none";
+  if (p.web) { site.href = p.web; site.textContent = t.viewSite; }
   $("#mLink").href = p.link;
   $("#mLink").textContent = t.viewRepo;
+  $("#mLink").className = p.web ? "btn ghost" : "btn primary";
   $("#mClose").textContent = t.close;
   $("#mShot").style.setProperty("--accent", p.color);
   const play = $("#mPlay");
@@ -418,7 +450,7 @@ function sectionHTML(sec) {
   if (sec === "work") return `<section><div class="num">${num} / ${t.workTitle}</div><h2>${t.workTitle}</h2>
     <div class="cards">${PROJECTS.map((p, i) => `<div class="card" data-idx="${i}">
       <div class="meta"><span class="sw" style="background:${p.color}"></span><span class="kd">${L(p.kind)}</span></div>
-      <div class="t">${p.title}</div><div class="bl">${L(p.blurb)}</div></div>`).join("")}</div></section>`;
+      <div class="t">${L(p.title)}</div><div class="bl">${L(p.blurb)}</div></div>`).join("")}</div></section>`;
   if (sec === "skills") return `<section><div class="num">${num} / ${t.skillsTitle}</div><h2>${t.skillsTitle}</h2>
     <div class="skills">${SKILLS.map(s => `<div class="skillcol"><div class="lbl" style="color:${s.color}">${L(s.label)}</div>
       <div class="chips">${s.items.map(i => `<span class="chip">${L(i)}</span>`).join("")}</div></div>`).join("")}</div></section>`;
@@ -966,7 +998,7 @@ const MM_LEN = 4, MM_TRIES = 10;
 
 const MM_TXT = {
   es: {
-    kicker: "Ruinas del Enigma · minijuego",
+    kicker: "Cripta del Código · minijuego",
     title: "El código ancestral",
     hint: `Cuatro orbes guardan un código de ${MM_LEN} colores (pueden repetirse). Tienes ${MM_TRIES} intentos. Tras cada intento: <b style="color:#7fdca8">●</b> acierto en su sitio, <b>○</b> color correcto en otra posición.`,
     check: "Comprobar", clear: "Borrar", close: "Salir",
@@ -980,7 +1012,7 @@ const MM_TXT = {
     needZone: "Acércate a las Ruinas del Enigma para jugar"
   },
   en: {
-    kicker: "Ruins of the Riddle · minigame",
+    kicker: "Crypt of the Code · minigame",
     title: "The ancient code",
     hint: `Four orbs guard a ${MM_LEN}-colour code (repeats allowed). You get ${MM_TRIES} tries. After each guess: <b style="color:#7fdca8">●</b> right colour in the right place, <b>○</b> right colour, wrong place.`,
     check: "Check", clear: "Clear", close: "Leave",
@@ -6082,7 +6114,7 @@ class Game {
     this.m(new SphGeo(3.4, 16, 14), new StdMat({ map: stripes, roughness: .7 }), 0, 0, 0, { parent: bal });
     this.m(new ConeGeo(1.6, 2.6, 10), this.mat(0xc98a3a), 0, -3.4, 0, { parent: bal, rx: Math.PI });
     this.m(new BoxGeo(1.4, 1, 1.4), this.mat(0x6a4a2f, { roughness: 1 }), 0, -5.2, 0, { parent: bal });
-    const banner = this.makeLabel("OPEN TO WORK", "#ffd76a", 2.2);
+    const banner = this.makeLabel("OPEN TO OFFERS", "#ffd76a", 2.2);
     banner.position.y = -7.2; bal.add(banner);
     this.anims.push(t => {
       const a = t * .05;
@@ -6451,7 +6483,7 @@ class Game {
     f.cool = 0;
   }
 
-  /* ============ 2 · El Gran Almacén (TriniGlass) ============ */
+  /* ============ 2 · El Gran Almacén (Reloda, que empezó como TriniGlass) ============ */
   buildWarehouse() {
     const p = ZONE_POS[2];
     const G = new Grp(); G.position.set(p.x, 0, p.z);
@@ -6483,7 +6515,7 @@ class Game {
       g.fillStyle = "#20242c"; g.fillRect(0, 0, 256, 96);
       g.font = '700 44px "Space Grotesk", sans-serif';
       g.textAlign = "center"; g.textBaseline = "middle";
-      g.fillStyle = "#e8b06a"; g.fillText("TRINIGLASS", 128, 50);
+      g.fillStyle = "#e8b06a"; g.fillText("RELODA", 128, 50);
     });
     this.m(new BoxGeo(7, 2.4, .3), new StdMat({ map: signTex, emissive: new Col(0x503818), emissiveIntensity: .5, roughness: .5 }), 0, 7.9, -5.6, { parent: G });
 

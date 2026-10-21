@@ -6,7 +6,7 @@ import "./globals.css";
    in its <head>, and porting the body and the CSS left it behind. */
 const TITLE = "Raúl Jiménez Ayza · La Isla del Gato — portfolio jugable 3D";
 const DESC =
-  "La Isla del Gato: el portfolio jugable de Raúl Jiménez Ayza. Explora una isla con templos, físicas reales y un gato protagonista.";
+  "El portfolio jugable de Raúl Jiménez Ayza, ingeniero full stack y gameplay dev: una isla en 3D con templos que cuentan su CV y sus proyectos (Reloda, Rodalies al minuto, Luz barata, Interview Coach…), físicas reales y un gato protagonista.";
 const OG_ALT = "La Isla del Gato — el portfolio jugable de Raúl Jiménez Ayza";
 
 export const metadata: Metadata = {

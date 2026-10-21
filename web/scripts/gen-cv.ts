@@ -55,10 +55,11 @@ async function main() {
   const work = `<h2>${esc(t.workTitle)}</h2>
 <ul>${PROJECTS.map((p: any) => `
   <li>
-    <h3>${esc(p.title)}</h3>
+    <h3>${esc(L(p.title))}</h3>
     <p>${esc(L(p.kind))} — ${esc(L(p.blurb))}</p>
     <p>${esc(L(p.body))}</p>
-    <p>${p.tags.map((g: string) => esc(g)).join(", ")}</p>
+    <p>${p.tags.map((g: Localised) => esc(L(g))).join(", ")}</p>
+    ${p.web ? `<p><a href="${esc(p.web)}" rel="noopener">${esc(p.web)}</a></p>` : ""}
     ${p.link ? `<p><a href="${esc(p.link)}" rel="noopener">${esc(p.link)}</a></p>` : ""}
   </li>`).join("")}
 </ul>`;

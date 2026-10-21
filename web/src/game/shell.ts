@@ -89,6 +89,7 @@ export const SHELL_HTML = `<div id="scene"></div>
         <div class="tags" id="mTags"></div>
         <div class="acts">
           <button id="mPlay" class="btn primary" style="display:none"></button>
+          <a id="mWeb" class="btn primary" target="_blank" rel="noopener" style="display:none"></a>
           <a id="mLink" class="btn primary" target="_blank" rel="noopener"></a>
           <button id="mClose" class="btn ghost"></button>
         </div>
