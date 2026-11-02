@@ -105,7 +105,7 @@ const I18N = {
     flipBack: "¡Mortal hacia atrás!", flipFront: "¡Mortal hacia delante!",
     aboutTitle: "Sobre mí",
     aboutP1: "Soy Raúl, ingeniero informático por la UAB (2026). Empecé estudiando diseño y desarrollo de videojuegos en la Universitat de Girona, y esa semilla gamedev sigue en todo lo que hago: mi TFG fue un simulador donde poblaciones de agentes evolucionan por su cuenta buscando comida.",
-    aboutP2: "Hoy soy full stack en Service Next (Montmeló): un backend en Python/FastAPI que sirve agentes de IA y las apps en Next.js que los usan. Antes, un año largo de becario de TI en GCO. Por mi cuenta hago productos que usa gente de verdad: Reloda, que empezó como una app de almacén para una pyme del vidrio que lo llevaba todo en papel, y dos servicios gratuitos en directo, Rodalies al minuto y Luz barata. Unity y Unreal por gusto; TypeScript y Python por oficio.",
+    aboutP2: "Hoy soy full stack en Service Next (Montmeló): un backend en Python/FastAPI que sirve agentes de IA y las apps en Next.js que los usan. Antes, un año largo de becario de TI en GCO. Por mi cuenta hago productos: Reloda, que empezó como una app de almacén para una pyme del vidrio que lo llevaba todo en papel, y dos servicios gratuitos en directo, Rodalies al minuto y Luz barata. Unity y Unreal por gusto; TypeScript y Python por oficio.",
     stat1: "motores: Unity, Unreal, Godot, UEFN", stat2: "productos en marcha con usuarios reales", stat3: "prototipos en el cajón",
     workTitle: "Proyectos", skillsTitle: "Skills", pathTitle: "Trayectoria", contactTitle: "Contacto",
     contactBody: "Full stack de día en Service Next, gameplay de noche. Ahora mismo trabajando, pero abierto a escuchar ofertas de gameplay, backend o fullstack — y cualquier proyecto con un problema raro dentro. Respondo rápido."
@@ -134,7 +134,7 @@ const I18N = {
     flipBack: "Backflip!", flipFront: "Frontflip!",
     aboutTitle: "About",
     aboutP1: "I'm Raúl, Computer Engineering graduate from UAB (2026). I started out studying game design and development at Universitat de Girona, and that gamedev seed is in everything I do: my thesis was a simulator where populations of agents evolve on their own hunting for food.",
-    aboutP2: "Today I'm a full stack engineer at Service Next (Montmeló): a Python/FastAPI backend that serves AI agents, and the Next.js apps that use them. Before that, a year-plus IT internship at GCO. On my own I build products real people use: Reloda, which started as a warehouse app for a glass SME that ran on paper, and two free live services, Rodalies al minuto and Luz barata. Unity and Unreal for fun; TypeScript and Python for a living.",
+    aboutP2: "Today I'm a full stack engineer at Service Next (Montmeló): a Python/FastAPI backend that serves AI agents, and the Next.js apps that use them. Before that, a year-plus IT internship at GCO. On my own I build products: Reloda, which started as a warehouse app for a glass SME that ran on paper, and two free live services, Rodalies al minuto and Luz barata. Unity and Unreal for fun; TypeScript and Python for a living.",
     stat1: "engines: Unity, Unreal, Godot, UEFN", stat2: "live products with real users", stat3: "prototypes in the drawer",
     workTitle: "Work", skillsTitle: "Skills", pathTitle: "Path", contactTitle: "Contact",
     contactBody: "Full stack by day at Service Next, gameplay by night. Employed, but happy to hear about gameplay, backend or fullstack roles — and any project with a weird problem in it. I reply fast."
@@ -161,8 +161,8 @@ const PROJECTS = [
     short: "RL", kind: { es: "Producto · SaaS", en: "Product · SaaS" },
     title: "Reloda",
     blurb: { es: "Envases retornables de la fábrica al cliente y vuelta. Empezó como TriniGlass.", en: "Returnable packaging from factory to customer and back. Started as TriniGlass." },
-    body: { es: "Empezó como TriniGlass: una app de almacén para una pyme del vidrio que lo llevaba todo en papel. Creció hasta Reloda, un SaaS que sigue los envases retornables del pedido a la devolución: almacén en 2D y 3D, lectura de QR, planificación de rutas, reparto offline con firma del cliente y portal para clientes. Funciona en producción en un fabricante de vidrio. El código es privado; el caso de estudio es público.",
-      en: "It started as TriniGlass: a warehouse app for a glass SME that ran on paper. It grew into Reloda, a SaaS that tracks returnable packaging from order to return: 2D/3D warehouse, QR scanning, route planning, offline-first delivery with customer signatures and a client portal. In production at a glass manufacturer. The source is private; the case study is public." },
+    body: { es: "Empezó como TriniGlass: una app de almacén para una pyme del vidrio que lo llevaba todo en papel. Creció hasta Reloda, un SaaS que sigue los envases retornables del pedido a la devolución: almacén en 2D y 3D, lectura de QR, planificación de rutas, reparto offline con firma del cliente y portal para clientes. El código es privado; el caso de estudio es público.",
+      en: "It started as TriniGlass: a warehouse app for a glass SME that ran on paper. It grew into Reloda, a SaaS that tracks returnable packaging from order to return: 2D/3D warehouse, QR scanning, route planning, offline-first delivery with customer signatures and a client portal. The source is private; the case study is public." },
     tags: ["React 19", "TypeScript", "Firebase", "Three.js", "PWA offline", "Playwright"] },
   { id: "interview", color: PINK, web: "https://rauljimenezayza.github.io/interview-coach/", link: "https://github.com/RaulJimenezAyza/interview-coach",
     short: "IC", kind: { es: "IA · voz", en: "AI · voice" },
